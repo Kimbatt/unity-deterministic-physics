@@ -1,0 +1,54 @@
+{
+    "name": "Unity.Physics",
+    "rootNamespace": "",
+    "references": [
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Properties",
+        "Unity.Jobs",
+        "sfloat",
+        "smath",
+        "stransforms"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.havok.physics",
+            "expression": "0.0.0",
+            "define": "HAVOK_PHYSICS_EXISTS"
+        },
+        {
+            "name": "com.unity.dataflowgraph",
+            "expression": "0.0.0",
+            "define": "UNITY_DATAFLOWGRAPH_EXISTS"
+        },
+        {
+            "name": "com.unity.dataflowgraph",
+            "expression": "0.17.0-preview.3",
+            "define": "UNITY_DATAFLOWGRAPH_0_17_OR_NEWER"
+        },
+        {
+            "name": "com.unity.entities",
+            "expression": "0.12.0-preview",
+            "define": "UNITY_ENTITIES_0_12_OR_NEWER"
+        },
+        {
+            "name": "com.unity.package-validation-suite",
+            "expression": "0.0.0",
+            "define": "UNITY_SKIP_UPDATES_WITH_VALIDATION_SUITE"
+        },
+        {
+            "name": "com.unity.properties",
+            "expression": "1.1.0-preview",
+            "define": "UNITY_PROPERTIES_EXISTS"
+        }
+    ],
+    "noEngineReferences": false
+}

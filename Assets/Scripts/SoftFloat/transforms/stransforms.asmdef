@@ -1,0 +1,20 @@
+{
+    "name": "stransforms",
+    "rootNamespace": "",
+    "references": [
+        "GUID:713fe512bc5c81949bc19b5afdce303d",
+        "GUID:057b885f366e2cf43a4975f013cfd729",
+        "GUID:734d92eba21c94caba915361bd5ac177",
+        "GUID:e0cd26848372d4e5c891c569017e11f1",
+        "GUID:2665a8d13d1b3f18800f46e256720795"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

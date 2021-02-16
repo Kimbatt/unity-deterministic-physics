@@ -1,0 +1,16 @@
+{
+    "name": "smath",
+    "rootNamespace": "",
+    "references": [
+        "GUID:713fe512bc5c81949bc19b5afdce303d"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
