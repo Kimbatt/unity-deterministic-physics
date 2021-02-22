@@ -406,7 +406,7 @@ namespace UnityS.Physics
 
                 section->MaterialsBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->MaterialsBlob);
                 section->MaterialsBlob.Length = 1;
-                end += Math.NextMultipleOf(section->FiltersBlob.Length * sizeof(Material), 4);
+                end += Math.NextMultipleOf(section->MaterialsBlob.Length * sizeof(Material), 4);
 
                 Sections[sectionIndex].Materials[0] = material;
                 for (int i = 0; i < range.PrimitivesLength; i++)

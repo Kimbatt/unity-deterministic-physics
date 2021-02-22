@@ -17,9 +17,11 @@ namespace UnityS.Physics
         // ColliderKey of the hit leaf collider
         ColliderKey ColliderKey { get; }
 
+        // Material of the hit leaf collider
+        Material Material { get; }
+
         // Entity of the hit body
         Entity Entity { get; }
-
     }
 
     struct QueryContext
@@ -76,7 +78,6 @@ namespace UnityS.Physics
         // Called when the query hits something
         // Return true to accept the hit, or false to ignore it
         bool AddHit(T hit);
-
     }
 
     // A collector which exits the query as soon as any hit is detected.
@@ -100,7 +101,6 @@ namespace UnityS.Physics
         }
 
         #endregion
-
     }
 
     // A collector which stores only the closest hit.
@@ -132,7 +132,6 @@ namespace UnityS.Physics
         }
 
         #endregion
-
     }
 
     // A collector which stores every hit.
@@ -155,11 +154,39 @@ namespace UnityS.Physics
         public bool AddHit(T hit)
         {
             Assert.IsTrue(hit.Fraction < MaxFraction);
+
             AllHits.Add(hit);
             return true;
         }
 
         #endregion
+    }
 
+    // A collector used to provide filtering for QueryInteraction enum
+    // This is a wrapper of the user provided collector, which serves to enable
+    // filtering based on the QueryInteraction parameter.
+    internal unsafe struct QueryInteractionCollector<T, C> : ICollector<T>
+        where T : struct, IQueryResult
+        where C : struct, ICollector<T>
+    {
+        public bool EarlyOutOnFirstHit => Collector.EarlyOutOnFirstHit;
+
+        public sfloat MaxFraction => Collector.MaxFraction;
+
+        public int NumHits => Collector.NumHits;
+
+        // Todo: have a QueryInteraction field here, and filter differently based on it in AddHit()
+        // at the moment, this collector will only get constructed if IgnoreTriggers interaction is selected
+        public C Collector;
+
+        public bool AddHit(T hit)
+        {
+            if (hit.Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents)
+            {
+                return false;
+            }
+
+            return Collector.AddHit(hit);
+        }
     }
 }

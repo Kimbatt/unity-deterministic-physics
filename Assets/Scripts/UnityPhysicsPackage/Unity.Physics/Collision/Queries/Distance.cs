@@ -52,6 +52,12 @@ namespace UnityS.Physics
         /// <summary>
         ///
         /// </summary>
+        /// <value> Returns Material of queried leaf collider</value>
+        public Material Material { get; set; }
+
+        /// <summary>
+        ///
+        /// </summary>
         /// <value> Returns Entity of queried body</value>
         public Entity Entity { get; set; }
 
@@ -72,7 +78,6 @@ namespace UnityS.Physics
         /// </summary>
         /// <value> Distance at which the hit occurred. </value>
         public sfloat Distance => Fraction;
-
     }
 
     // Distance query implementations
@@ -644,34 +649,41 @@ namespace UnityS.Physics
                 input.QueryContext = QueryContext.DefaultContext;
             }
 
+            Material material = Material.Default;
+
             Result result;
             switch (target->Type)
             {
                 case ColliderType.Sphere:
                     var sphere = (SphereCollider*)target;
                     result = PointPoint(sphere->Center, input.Position, sphere->Radius, sphere->Radius);
+                    material = sphere->Material;
                     break;
                 case ColliderType.Capsule:
                     var capsule = (CapsuleCollider*)target;
                     result = CapsuleSphere(capsule->Vertex0, capsule->Vertex1, capsule->Radius, input.Position, sfloat.Zero, MTransform.Identity);
+                    material = capsule->Material;
                     break;
                 case ColliderType.Triangle:
                     var triangle = (PolygonCollider*)target;
                     result = TriangleSphere(
                         triangle->Vertices[0], triangle->Vertices[1], triangle->Vertices[2], triangle->Planes[0].Normal,
                         input.Position, sfloat.Zero, MTransform.Identity);
+                    material = triangle->Material;
                     break;
                 case ColliderType.Quad:
                     var quad = (PolygonCollider*)target;
                     result = QuadSphere(
                         quad->Vertices[0], quad->Vertices[1], quad->Vertices[2], quad->Vertices[3], quad->Planes[0].Normal,
                         input.Position, sfloat.Zero, MTransform.Identity);
+                    material = quad->Material;
                     break;
                 case ColliderType.Convex:
                 case ColliderType.Box:
                 case ColliderType.Cylinder:
                     ref ConvexHull hull = ref ((ConvexCollider*)target)->ConvexHull;
                     result = ConvexConvex(hull.VerticesPtr, hull.NumVertices, hull.ConvexRadius, &input.Position, 1, sfloat.Zero, MTransform.Identity);
+                    material = ((ConvexColliderHeader*)target)->Material;
                     break;
                 case ColliderType.Mesh:
                     return PointMesh(input, (MeshCollider*)target, ref collector);
@@ -692,6 +704,7 @@ namespace UnityS.Physics
                     SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
                     Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
                     ColliderKey = input.QueryContext.ColliderKey,
+                    Material = material,
                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                     Entity = input.QueryContext.Entity
                 };
@@ -713,6 +726,7 @@ namespace UnityS.Physics
                 input.QueryContext = QueryContext.DefaultContext;
             }
 
+            Material material = Material.Default;
             switch (input.Collider->CollisionType)
             {
                 case CollisionType.Convex:
@@ -725,6 +739,8 @@ namespace UnityS.Physics
                         case ColliderType.Quad:
                         case ColliderType.Box:
                         case ColliderType.Cylinder:
+
+                            material = ((ConvexColliderHeader*)target)->Material;
                             MTransform targetFromQuery = new MTransform(input.Transform);
                             Result result = ConvexConvex(target, input.Collider, targetFromQuery);
                             if (result.Distance < collector.MaxFraction)
@@ -736,6 +752,7 @@ namespace UnityS.Physics
                                     Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
                                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                                     ColliderKey = input.QueryContext.ColliderKey,
+                                    Material = material,
                                     Entity = input.QueryContext.Entity
                                 };
 
@@ -777,7 +794,7 @@ namespace UnityS.Physics
             public bool DistanceLeaf<T>(PointDistanceInput input, int primitiveKey, ref T collector)
                 where T : struct, ICollector<DistanceHit>
             {
-                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter);
+                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
 
                 if (!CollisionFilter.IsCollisionEnabled(input.Filter, filter)) // TODO: could do this check within GetPrimitive()
                 {
@@ -815,6 +832,7 @@ namespace UnityS.Physics
                             SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
                             RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                             ColliderKey = input.QueryContext.SetSubKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex)),
+                            Material = material,
                             Entity = input.QueryContext.Entity
                         };
 
@@ -828,7 +846,7 @@ namespace UnityS.Physics
             public bool DistanceLeaf<T>(ColliderDistanceInput input, int primitiveKey, ref T collector)
                 where T : struct, ICollector<DistanceHit>
             {
-                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter);
+                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
 
                 if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, filter)) // TODO: could do this check within GetPrimitive()
                 {
@@ -873,6 +891,7 @@ namespace UnityS.Physics
                             SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
                             RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                             ColliderKey = input.QueryContext.SetSubKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex)),
+                            Material = material,
                             Entity = input.QueryContext.Entity
                         };
 
@@ -972,6 +991,7 @@ namespace UnityS.Physics
             where T : struct, ICollector<DistanceHit>
         {
             ref var terrain = ref terrainCollider->Terrain;
+            Material material = terrainCollider->Material;
 
             bool hadHit = false;
 
@@ -1028,6 +1048,7 @@ namespace UnityS.Physics
                                     SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
                                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                                     ColliderKey = input.QueryContext.SetSubKey(terrain.NumColliderKeyBits, terrain.GetSubKey(quadIndex, iTriangle)),
+                                    Material = material,
                                     Entity = input.QueryContext.Entity
                                 };
 
@@ -1054,6 +1075,7 @@ namespace UnityS.Physics
             where T : struct, ICollector<DistanceHit>
         {
             ref var terrain = ref terrainCollider->Terrain;
+            Material material = terrainCollider->Material;
 
             bool hadHit = false;
 
@@ -1088,7 +1110,7 @@ namespace UnityS.Physics
 
                         // Test each triangle in the quad
                         var polygon = new PolygonCollider();
-                        polygon.InitEmpty();
+                        polygon.InitNoVertices(CollisionFilter.Default, material);
                         for (int iTriangle = 0; iTriangle < 2; iTriangle++)
                         {
                             // Point-triangle
@@ -1104,6 +1126,7 @@ namespace UnityS.Physics
                                     SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
                                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                                     ColliderKey = input.QueryContext.SetSubKey(terrain.NumColliderKeyBits, terrain.GetSubKey(quadIndex, iTriangle)),
+                                    Material = material,
                                     Entity = input.QueryContext.Entity
                                 };
 

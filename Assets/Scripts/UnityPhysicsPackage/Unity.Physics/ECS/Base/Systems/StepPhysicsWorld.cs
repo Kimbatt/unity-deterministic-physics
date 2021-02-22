@@ -99,7 +99,7 @@ namespace UnityS.Physics.Systems
                 SynchronizeCollisionWorld = stepComponent.SynchronizeCollisionWorld > 0,
                 NumSolverIterations = stepComponent.SolverIterationCount,
                 SolverStabilizationHeuristicSettings = stepComponent.SolverStabilizationHeuristicSettings
-            }, m_Callbacks, handle, stepComponent.ThreadCountHint);
+            }, m_Callbacks, handle, stepComponent.MultiThreaded > 0);
 
             // Clear the callbacks. User must enqueue them again before the next step.
             m_Callbacks.Clear();
@@ -136,7 +136,10 @@ namespace UnityS.Physics.Systems
 
             public void Dispose() { }
             public void Step(SimulationStepInput input) { }
+            [Obsolete("ScheduleStepJobs() has been deprecated. Please use the new method taking a bool as the last parameter. (RemovedAfter 2021-02-15)", true)]
             public SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, int threadCountHint = 0) =>
+                new SimulationJobHandles(inputDeps);
+            public SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, bool multiThreaded = true) =>
                 new SimulationJobHandles(inputDeps);
             public JobHandle FinalSimulationJobHandle => new JobHandle();
             public JobHandle FinalJobHandle => new JobHandle();

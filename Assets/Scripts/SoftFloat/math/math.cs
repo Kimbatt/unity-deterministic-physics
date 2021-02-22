@@ -68,6 +68,15 @@ namespace UnityS.Mathematics
         /// <summary>The mathematical constant pi. Approximately 3.14.</summary>
         public static sfloat PI => sfloat.FromRaw(0x40490fdb);
 
+        /// <summary>pi / 2. Approximately 1.57.</summary>
+        public static sfloat PI_HALF => sfloat.FromRaw(0x3fc90fdb);
+
+        /// <summary>pi / 4. Approximately 0.79.</summary>
+        public static sfloat PI_OVER_4 => sfloat.FromRaw(0x3f490fdb);
+
+        /// <summary>pi * 2. Approximately 6.28.</summary>
+        public static sfloat TWO_PI => sfloat.FromRaw(0x40c90fdb);
+
         /// <summary>The square root 2. Approximately 1.41.</summary>
         public static sfloat SQRT2 => sfloat.FromRaw(0x3fb504f3);
 

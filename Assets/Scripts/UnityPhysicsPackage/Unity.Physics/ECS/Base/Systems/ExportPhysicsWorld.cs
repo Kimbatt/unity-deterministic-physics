@@ -24,7 +24,7 @@ namespace UnityS.Physics.Systems
         {
             [NativeDisableUnsafePtrRestriction]
             public AtomicSafetyManager* SafetyManager;
-           
+
             public static SharedData Create()
             {
                 var sharedData = new SharedData();
@@ -33,7 +33,7 @@ namespace UnityS.Physics.Systems
 
                 return sharedData;
             }
-            
+
             public void Dispose()
             {
                 SafetyManager->Dispose();
@@ -46,20 +46,26 @@ namespace UnityS.Physics.Systems
         }
 
         private SharedData m_SharedData;
-        
+
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
             m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
-            
+
             m_SharedData = SharedData.Create();
+
+#if !ENABLE_UNITY_COLLECTIONS_CHECKS
+            // Calling RequireForUpdate will mean that the system will not be updated if there are no dynamic bodies.
+            // However, if we are performing want collider integrity checks we need the system to run regardless.
+            RequireForUpdate(m_BuildPhysicsWorldSystem.DynamicEntityGroup);
+#endif
         }
 
         protected override void OnDestroy()
         {
-           m_SharedData.Dispose(); 
+            m_SharedData.Dispose();
         }
-        
+
         protected override void OnUpdate()
         {
             // Combine implicit input dependency with the user one
@@ -83,11 +89,11 @@ namespace UnityS.Physics.Systems
                 PositionType = positionType,
                 RotationType = rotationType,
                 VelocityType = velocityType
-            }.Schedule(m_BuildPhysicsWorldSystem.DynamicEntityGroup, handle);
+            }.ScheduleParallel(m_BuildPhysicsWorldSystem.DynamicEntityGroup, 1, handle);
 
-            // Sync shared data. 
+            // Sync shared data.
             m_SharedData.Sync();
-            
+
             int numCollisionWorldProxies = m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup.CalculateEntityCount();
             if (numCollisionWorldProxies > 0)
             {
@@ -96,8 +102,8 @@ namespace UnityS.Physics.Systems
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                     SharedData = m_SharedData,
                     ProxyType = GetComponentTypeHandle<CollisionWorldProxy>()
-                }.Schedule(m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup, handle);
-            }  
+                }.ScheduleParallel(m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup, 1, handle);
+            }
 
             m_OutputDependency = handle;
 
@@ -122,7 +128,7 @@ namespace UnityS.Physics.Systems
         }
 
         [BurstCompile]
-        internal struct ExportDynamicBodiesJob : IJobChunk
+        internal struct ExportDynamicBodiesJob : IJobEntityBatchWithIndex
         {
             [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
             [ReadOnly] public NativeArray<MotionData> MotionDatas;
@@ -131,14 +137,15 @@ namespace UnityS.Physics.Systems
             public ComponentTypeHandle<Rotation> RotationType;
             public ComponentTypeHandle<PhysicsVelocity> VelocityType;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int entityStartIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int entityStartIndex)
             {
-                var chunkPositions = chunk.GetNativeArray(PositionType);
-                var chunkRotations = chunk.GetNativeArray(RotationType);
-                var chunkVelocities = chunk.GetNativeArray(VelocityType);
+                var chunkPositions = batchInChunk.GetNativeArray(PositionType);
+                var chunkRotations = batchInChunk.GetNativeArray(RotationType);
+                var chunkVelocities = batchInChunk.GetNativeArray(VelocityType);
 
-                int numItems = chunk.Count;
-                for(int i = 0, motionIndex = entityStartIndex; i < numItems; i++, motionIndex++)
+                int numItems = batchInChunk.Count;
+
+                for (int i = 0, motionIndex = entityStartIndex; i < numItems; i++, motionIndex++)
                 {
                     MotionData md = MotionDatas[motionIndex];
                     RigidTransform worldFromBody = math.mul(md.WorldFromMotion, math.inverse(md.BodyFromMotion));
@@ -152,21 +159,22 @@ namespace UnityS.Physics.Systems
                 }
             }
         }
-        
+
         [BurstCompile]
-        internal unsafe struct CopyCollisionWorld : IJobChunk
+        internal unsafe struct CopyCollisionWorld : IJobEntityBatch
         {
             [ReadOnly] public PhysicsWorld World;
             public SharedData SharedData;
             public ComponentTypeHandle<CollisionWorldProxy> ProxyType;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            //public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
-                NativeArray<CollisionWorldProxy> chunkProxies = chunk.GetNativeArray(ProxyType);
+                NativeArray<CollisionWorldProxy> chunkProxies = batchInChunk.GetNativeArray(ProxyType);
 
                 var proxy = new CollisionWorldProxy(World.CollisionWorld, SharedData.SafetyManager);
 
-                for (var i = 0; i < chunk.Count; ++i)
+                for (var i = 0; i < batchInChunk.Count; ++i)
                     chunkProxies[i] = proxy;
             }
         }
@@ -185,24 +193,19 @@ namespace UnityS.Physics.Systems
                 IntegrityCheckMap = integrityCheckMap,
                 PositionType = positionType,
                 RotationType = rotationType,
-                PhysicsVelocityType = physicsVelocityType
+                PhysicsVelocityType = physicsVelocityType,
+                PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkDynamicBodyIntegrity.ScheduleSingle(m_BuildPhysicsWorldSystem.DynamicEntityGroup, inputDeps);
+            inputDeps = checkDynamicBodyIntegrity.Schedule(m_BuildPhysicsWorldSystem.DynamicEntityGroup, inputDeps);
 
-            var checkColliderIntegrity = new CheckColliderIntegrity
+            var checkStaticBodyColliderIntegrity = new CheckColliderIntegrity
             {
                 IntegrityCheckMap = integrityCheckMap,
                 PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkColliderIntegrity.ScheduleSingle(GetEntityQuery(new EntityQueryDesc
-            {
-                All = new ComponentType[]
-                {
-                    typeof(PhysicsCollider)
-                }
-            }), inputDeps);
+            inputDeps = checkStaticBodyColliderIntegrity.Schedule(m_BuildPhysicsWorldSystem.StaticEntityGroup, inputDeps);
 
             var checkTotalIntegrity = new CheckTotalIntegrity
             {
@@ -213,11 +216,12 @@ namespace UnityS.Physics.Systems
         }
 
         [BurstCompile]
-        internal struct CheckDynamicBodyIntegrity : IJobChunk
+        internal struct CheckDynamicBodyIntegrity : IJobEntityBatch
         {
             [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
+            [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public NativeHashMap<uint, long> IntegrityCheckMap;
 
             internal static void DecrementIfExists(NativeHashMap<uint, long> integrityCheckMap, uint systemVersion)
@@ -229,30 +233,43 @@ namespace UnityS.Physics.Systems
                 }
             }
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
-                DecrementIfExists(IntegrityCheckMap, chunk.GetOrderVersion());
-                DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsVelocityType));
-                if (chunk.Has(PositionType))
+                DecrementIfExists(IntegrityCheckMap, batchInChunk.GetOrderVersion());
+                DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsVelocityType));
+                if (batchInChunk.Has(PositionType))
                 {
-                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PositionType));
+                    DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PositionType));
                 }
-                if (chunk.Has(RotationType))
+                if (batchInChunk.Has(RotationType))
                 {
-                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(RotationType));
+                    DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(RotationType));
+                }
+                if (batchInChunk.Has(PhysicsColliderType))
+                {
+                    DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+
+                    var colliders = batchInChunk.GetNativeArray(PhysicsColliderType);
+                    CheckColliderFilterIntegrity(colliders);
                 }
             }
         }
 
         [BurstCompile]
-        internal struct CheckColliderIntegrity : IJobChunk
+        internal struct CheckColliderIntegrity : IJobEntityBatch
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public NativeHashMap<uint, long> IntegrityCheckMap;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
-                CheckDynamicBodyIntegrity.DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsColliderType));
+                if (batchInChunk.Has(PhysicsColliderType))
+                {
+                    CheckDynamicBodyIntegrity.DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+
+                    var colliders = batchInChunk.GetNativeArray(PhysicsColliderType);
+                    CheckColliderFilterIntegrity(colliders);
+                }
             }
         }
 
@@ -263,7 +280,7 @@ namespace UnityS.Physics.Systems
             public void Execute()
             {
                 var values = IntegrityCheckMap.GetValueArray(Allocator.Temp);
-                var validIntegrity = true; 
+                var validIntegrity = true;
                 for (int i = 0; i < values.Length; i++)
                 {
                     if (values[i] != 0)
@@ -280,7 +297,39 @@ namespace UnityS.Physics.Systems
             }
         }
 
-        #endregion
+        // Verifies combined collision filter of compound colliders
+        // ToDo: add the same for mesh once per-triangle filters are supported
+        private static void CheckColliderFilterIntegrity(NativeArray<PhysicsCollider> colliders)
+        {
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                var collider = colliders[i];
+                if (collider.Value.Value.Type == ColliderType.Compound)
+                {
+                    unsafe
+                    {
+                        var compoundCollider = (CompoundCollider*)collider.ColliderPtr;
 
+                        var rootFilter = compoundCollider->Filter;
+                        var combinedFilter = CollisionFilter.Zero;
+                        for (int childIndex = 0; childIndex < compoundCollider->Children.Length; childIndex++)
+                        {
+                            ref CompoundCollider.Child c = ref compoundCollider->Children[childIndex];
+                            combinedFilter = CollisionFilter.CreateUnion(combinedFilter, c.Collider->Filter);
+                        }
+
+                        // Check that the combined filter of all children is the same as root filter.
+                        // If not, it means user has forgotten to call RefreshCollisionFilter() on the CompoundCollider.
+                        if (!rootFilter.Equals(combinedFilter))
+                        {
+                            SafetyChecks.ThrowInvalidOperationException("CollisionFilter of a compound collider is not a union of its children. " +
+                                "You must call CompoundCollider.RefreshCollisionFilter() to update the root filter after changing child filters.");
+                        }
+                    }
+                }
+            }
+        }
+
+        #endregion
     }
 }

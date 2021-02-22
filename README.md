@@ -1,6 +1,6 @@
 # Unity deterministic physics
 
-This is a modified version of [Unity DOTS Physics version 0.5.1-preview.2](https://docs.unity3d.com/Packages/com.unity.physics@0.5/manual/index.html), which supports cross-platform deterministic physics simulation by using [soft floats](https://github.com/Kimbatt/soft-float-starter-pack).
+This is a modified version of [Unity DOTS Physics version 0.6.0-preview.3](https://docs.unity3d.com/Packages/com.unity.physics@0.6/manual/index.html), which supports cross-platform deterministic physics simulation by using [soft floats](https://github.com/Kimbatt/soft-float-starter-pack).
 
 ## Usage
 The following packages must be installed:
@@ -11,7 +11,7 @@ The following packages must be installed:
 
 You'll need to use the `UnityS.Physics` and the `UnityS.Mathematics` namespaces instead of the usual `Unity.Physics` and `Unity.Mathematics`.
 
-See [Unity Physics 0.5.1-preview.2 manual](https://docs.unity3d.com/Packages/com.unity.physics@0.5/manual/index.html) for documentation.
+See [Unity Physics manual](https://docs.unity3d.com/Packages/com.unity.physics@0.6/manual/index.html) for documentation.
 
 ## Notes on determinism
 For a deterministic physics simulation:

@@ -21,11 +21,11 @@ namespace UnityS.Physics
         // Schedules a set of jobs to iterate the provided dispatch pairs and create contacts based on them.
         internal static SimulationJobHandles ScheduleCreateContactsJobs(ref PhysicsWorld world, sfloat timeStep,
             ref NativeStream contacts, ref NativeStream jacobians, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
-            JobHandle inputDeps, ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, int threadCountHint = 0)
+            JobHandle inputDeps, ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 contacts = new NativeStream(1, Allocator.TempJob);
                 jacobians = new NativeStream(1, Allocator.TempJob);

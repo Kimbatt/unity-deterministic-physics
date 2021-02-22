@@ -136,9 +136,9 @@ namespace UnityS.Physics
         // Schedule the job to apply gravity to all dynamic bodies and copy input velocities
         internal static JobHandle ScheduleApplyGravityAndCopyInputVelocitiesJob(
             NativeArray<MotionVelocity> motionVelocities, NativeArray<Velocity> inputVelocities,
-            float3 gravityAcceleration, JobHandle inputDeps, int threadCountHint = 0)
+            float3 gravityAcceleration, JobHandle inputDeps, bool multiThreaded = true)
         {
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 var job = new ApplyGravityAndCopyInputVelocitiesJob
                 {
@@ -178,11 +178,11 @@ namespace UnityS.Physics
         internal static SimulationJobHandles ScheduleBuildJacobiansJobs(ref PhysicsWorld world, sfloat timeStep, float3 gravity,
             int numSolverIterations, JobHandle inputDeps, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
             ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
-            ref NativeStream contacts, ref NativeStream jacobians, int threadCountHint = 0)
+            ref NativeStream contacts, ref NativeStream jacobians, bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 returnHandles.FinalExecutionHandle = new BuildJacobiansJob
                 {
@@ -253,11 +253,11 @@ namespace UnityS.Physics
             ref DynamicsWorld dynamicsWorld, sfloat timestep, int numIterations,
             ref NativeStream jacobians, ref NativeStream collisionEvents, ref NativeStream triggerEvents,
             ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
-            StabilizationData solverStabilizationData, JobHandle inputDeps, int threadCountHint = 0)
+            StabilizationData solverStabilizationData, JobHandle inputDeps, bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 collisionEvents = new NativeStream(1, Allocator.Persistent);
                 triggerEvents = new NativeStream(1, Allocator.Persistent);
@@ -382,8 +382,6 @@ namespace UnityS.Physics
                 NativeArray<MotionVelocity> motionVelocities, NativeArray<Velocity> inputVelocities)
             {
                 MotionVelocity motionVelocity = motionVelocities[i];
-                motionVelocity.PreviousLinearVelocity = motionVelocity.LinearVelocity;
-                motionVelocity.PreviousAngularVelocity = motionVelocity.AngularVelocity;
 
                 // Apply gravity
                 motionVelocity.LinearVelocity += gravityAcceleration * motionVelocity.GravityFactor;
@@ -745,7 +743,7 @@ namespace UnityS.Physics
                 {
                     WorldFromMotion = world.Bodies[bodyIndex].WorldFromBody,
                     BodyFromMotion = RigidTransform.identity
-                        // remaining fields all zero
+                    // remaining fields all zero
                 };
             }
             else
@@ -798,16 +796,6 @@ namespace UnityS.Physics
                         }
 
                         ref ContactHeader contactHeader = ref contactReader.Read<ContactHeader>();
-                        if (contactHeader.Discard)
-                        {
-                            // Skip contacts that were discarded by user code
-                            for (int j = 0; j < contactHeader.NumContacts; j++)
-                            {
-                                contactReader.Read<ContactPoint>();
-                            }
-                            continue;
-                        }
-
                         GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out MotionVelocity velocityA, out MotionVelocity velocityB, out MTransform worldFromA, out MTransform worldFromB);
 
                         sfloat sumInvMass = velocityA.InverseMass + velocityB.InverseMass;

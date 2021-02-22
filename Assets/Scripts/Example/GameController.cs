@@ -37,11 +37,7 @@ public class GameController : SystemBase
         };
 
         physicsStepParams.SolverIterationCount = 3;
-#if UNITY_WEBGL && !UNITY_EDITOR
-        physicsStepParams.ThreadCountHint = 0;
-#else
-        physicsStepParams.ThreadCountHint = SystemInfo.processorCount;
-#endif
+        physicsStepParams.MultiThreaded = 1;
         physicsStepParams.Gravity = new float3(sfloat.Zero, (sfloat)(-60.0f), sfloat.Zero);
         EntityManager.SetComponentData(physicsStep, physicsStepParams);
 

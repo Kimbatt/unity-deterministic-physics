@@ -66,7 +66,7 @@ namespace UnityS.Physics
     {
         public BaseContactJacobian BaseJacobian;
 
-        // Linear friction jacobians.  Only store the angular part, linear part can be recalculated from BaseJacobian.Normal 
+        // Linear friction jacobians.  Only store the angular part, linear part can be recalculated from BaseJacobian.Normal
         public ContactJacobianAngular Friction0; // EffectiveMass stores friction effective mass matrix element (0, 0)
         public ContactJacobianAngular Friction1; // EffectiveMass stores friction effective mass matrix element (1, 1)
 
@@ -220,9 +220,11 @@ namespace UnityS.Physics
                 AngularFriction.Impulse += imp.z;
             }
 
-            // Write back
-            velocityA = tempVelocityA;
-            velocityB = tempVelocityB;
+            // Write back linear and angular velocities. Changes to other properties, like InverseMass, should not be persisted.
+            velocityA.LinearVelocity = tempVelocityA.LinearVelocity;
+            velocityA.AngularVelocity = tempVelocityA.AngularVelocity;
+            velocityB.LinearVelocity = tempVelocityB.LinearVelocity;
+            velocityB.AngularVelocity = tempVelocityB.AngularVelocity;
         }
 
         // Solve the infinite mass pair Jacobian
@@ -250,7 +252,7 @@ namespace UnityS.Physics
                 {
                     // Export collision event only if impulse would be applied, or objects are penetrating
                     ExportCollisionEvent(sfloat.Zero, ref jacHeader, ref collisionEventsWriter);
- 
+
                     return;
                 }
             }

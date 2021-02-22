@@ -13,7 +13,6 @@ namespace UnityS.Physics
         public BodyIndexPair BodyPair;
         public CustomTagsPair BodyCustomTags;
         public JacobianFlags JacobianFlags;
-        public bool Discard;
         public int NumContacts;
         public float3 Normal;
         public sfloat CoefficientOfFriction;
@@ -186,7 +185,9 @@ namespace UnityS.Physics
                 int startIndex = 0;
                 int increment = header.NumContacts < 6 ?
                     math.max(header.NumContacts / 2, 1) : (header.NumContacts / 3 + ((header.NumContacts % 3 > 0) ? 1 : 0));
-                for (int contactIndex = 0; ; contactIndex += increment)
+
+                int contactIndex = 0;
+                while (true)
                 {
                     if (contactIndex >= header.NumContacts)
                     {
@@ -197,8 +198,8 @@ namespace UnityS.Physics
                         }
                         contactIndex = startIndex;
                     }
-
                     context.ContactWriter->Write(manifold[contactIndex]);
+                    contactIndex += increment;
                 }
             }
         }
@@ -468,7 +469,7 @@ namespace UnityS.Physics
                         Mesh* mesh = &((MeshCollider*)m_CompositeColliderB)->Mesh;
                         uint numMeshKeyBits = mesh->NumColliderKeyBits;
                         var polygon = new PolygonCollider();
-                        polygon.InitEmpty();
+                        polygon.InitNoVertices(CollisionFilter.Default, Material.Default);
                         for (int i = 0; i < count; i++)
                         {
                             ColliderKey compositeKey = m_CompositeColliderKeyPath.GetLeafKey(keys[i]);
@@ -598,7 +599,7 @@ namespace UnityS.Physics
             readonly bool m_Flipped;
 
             ColliderKeyPath m_KeyPath;
-            
+
             public CompositeCompositeLeafCollector(
                 Context context,
                 Collider* compositeColliderA, Collider* compositeColliderB,

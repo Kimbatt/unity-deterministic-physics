@@ -75,7 +75,7 @@ namespace UnityS.Physics.GraphicsIntegration
             {
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 PhysicsGraphicalSmoothingType = GetComponentTypeHandle<PhysicsGraphicalSmoothing>()
-            }.ScheduleParallel(SmoothedDynamicBodiesGroup, Dependency);
+            }.ScheduleParallel(SmoothedDynamicBodiesGroup, 1, Dependency);
 
             // Combine implicit output dependency with user one
             m_OutputDependency = Dependency;
@@ -88,15 +88,15 @@ namespace UnityS.Physics.GraphicsIntegration
         }
 
         [BurstCompile]
-        unsafe struct CopyPhysicsVelocityJob : IJobChunk
+        unsafe struct CopyPhysicsVelocityJob : IJobEntityBatch
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             public ComponentTypeHandle<PhysicsGraphicalSmoothing> PhysicsGraphicalSmoothingType;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
-                NativeArray<PhysicsVelocity> physicsVelocities = chunk.GetNativeArray(PhysicsVelocityType);
-                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = chunk.GetNativeArray(PhysicsGraphicalSmoothingType);
+                NativeArray<PhysicsVelocity> physicsVelocities = batchInChunk.GetNativeArray(PhysicsVelocityType);
+                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = batchInChunk.GetNativeArray(PhysicsGraphicalSmoothingType);
 
                 UnsafeUtility.MemCpyStride(
                     physicsGraphicalSmoothings.GetUnsafePtr(), UnsafeUtility.SizeOf<PhysicsGraphicalSmoothing>(),

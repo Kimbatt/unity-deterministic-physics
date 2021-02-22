@@ -83,16 +83,6 @@ namespace UnityS.Physics
                 Modified = true;
             }
         }
-
-        public bool Discard
-        {
-            get => ContactHeader.Discard;
-            set
-            {
-                ContactHeader.Discard = value;
-                Modified = true;
-            }
-        }
     }
 
     public struct ModifiableContactPoint
@@ -139,6 +129,7 @@ namespace UnityS.Physics
 
             return ScheduleUnityPhysicsContactsJob(jobData, simulation, ref world, inputDeps);
         }
+
 #else
         // In this case Schedule() implementation for IContactsJob is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
@@ -170,8 +161,11 @@ namespace UnityS.Physics
                 Bodies = world.Bodies
             };
             var parameters = new JobsUtility.JobScheduleParameters(
-                UnsafeUtility.AddressOf(ref data),
-                ContactsJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Parallel);
+#if UNITY_2020_2_OR_NEWER
+                UnsafeUtility.AddressOf(ref data), ContactsJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
+#else
+                UnsafeUtility.AddressOf(ref data), ContactsJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
+#endif
             return JobsUtility.Schedule(ref parameters);
         }
 
@@ -193,8 +187,11 @@ namespace UnityS.Physics
             {
                 if (jobReflectionData == IntPtr.Zero)
                 {
-                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(ContactsJobData<T>),
-                        typeof(T), (ExecuteJobFunction)Execute);
+#if UNITY_2020_2_OR_NEWER
+                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(ContactsJobData<T>), typeof(T), (ExecuteJobFunction)Execute);
+#else
+                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(ContactsJobData<T>), typeof(T), JobType.Single, (ExecuteJobFunction)Execute);
+#endif
                 }
                 return jobReflectionData;
             }

@@ -292,11 +292,11 @@ namespace UnityS.Physics
         internal unsafe SimulationJobHandles ScheduleCreatePhasedDispatchPairsJob(
             ref PhysicsWorld world, ref NativeStream dynamicVsDynamicBroadphasePairsStream, ref NativeStream staticVsDynamicBroadphasePairStream,
             JobHandle inputDeps, ref NativeList<DispatchPair> dispatchPairs, out SolverSchedulerInfo solverSchedulerInfo,
-            int threadCountHint = 0)
+            bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 dispatchPairs = new NativeList<DispatchPair>(Allocator.TempJob);
 
@@ -513,7 +513,7 @@ namespace UnityS.Physics
 
             // Joints from dynamics world
             [ReadOnly] public NativeArray<Joint> Joints;
-            
+
             // Outputs
             public NativeList<DispatchPair> UnsortedDispatchPairs;
             public NativeList<DispatchPair> DispatchPairsUninitialized;
@@ -525,7 +525,7 @@ namespace UnityS.Physics
 
             internal static void ExecuteImpl(
                 NativeStream dynamicVsDynamicPairs, NativeStream staticVsDynamicPairs,
-                NativeArray<Joint> joints, 
+                NativeArray<Joint> joints,
                 NativeList<DispatchPair> unsortedDispatchPairs, NativeList<DispatchPair> dispatchPairsUninitialized)
             {
                 int numValidJoints = 0;
@@ -933,7 +933,7 @@ namespace UnityS.Physics
                 }
 
                 // Uncomment this code when testing scheduler
-//               CheckIntegrity(phasedDispatchPairs, numDynamicBodies, ref phaseInfo);
+                //               CheckIntegrity(phasedDispatchPairs, numDynamicBodies, ref phaseInfo);
 
                 //<todo.eoin.usermod Can we get rid of this max()? Needed if the user wants to add contacts themselves.
                 numWorkItems = math.max(1, SolverSchedulerInfo.CalculateNumWorkItems(phaseInfo));

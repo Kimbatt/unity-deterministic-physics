@@ -18,9 +18,9 @@ namespace UnityS.Physics
         }
 
         // Schedule a job to integrate the world's motions forward by the given time step.
-        internal static JobHandle ScheduleIntegrateJobs(ref DynamicsWorld world, sfloat timeStep, JobHandle inputDeps, int threadCountHint = 0)
+        internal static JobHandle ScheduleIntegrateJobs(ref DynamicsWorld world, sfloat timeStep, JobHandle inputDeps, bool multiThreaded = true)
         {
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 var job = new IntegrateMotionsJob
                 {

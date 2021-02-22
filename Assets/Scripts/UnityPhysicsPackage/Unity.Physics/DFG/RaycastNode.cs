@@ -1,4 +1,4 @@
-﻿#if UNITY_DATAFLOWGRAPH_EXISTS
+#if UNITY_DATAFLOWGRAPH_EXISTS
 using Unity.DataFlowGraph;
 using Unity.Burst;
 
@@ -7,12 +7,7 @@ namespace Unity.Physics
     /// <summary>
     /// DataFlowGraph node that performs a Ray Cast query on a CollisionWorld.
     /// </summary>
-    public class RaycastNode :
-#if UNITY_DATAFLOWGRAPH_0_17_OR_NEWER
-        KernelNodeDefinition<RaycastNode.KernelDefs>
-#else
-        NodeDefinition<RaycastNode.Data, RaycastNode.SimPorts, RaycastNode.KernelData, RaycastNode.KernelDefs, RaycastNode.Kernel>
-#endif
+    public class RaycastNode : KernelNodeDefinition<RaycastNode.KernelDefs>
     {
         public struct SimPorts : ISimulationPortDefinition
         {
@@ -38,7 +33,7 @@ namespace Unity.Physics
         [BurstCompile]
         public struct Kernel : IGraphKernel<KernelData, KernelDefs>
         {
-            public void Execute(RenderContext ctx, KernelData data, ref KernelDefs ports)
+            public void Execute(RenderContext ctx, in KernelData data, ref KernelDefs ports)
             {
                 var collisionWorldProxy = ctx.Resolve(ports.CollisionWorld);
                 if (!collisionWorldProxy.IsCreated)

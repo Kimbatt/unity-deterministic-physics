@@ -1,4 +1,4 @@
-﻿#if UNITY_DATAFLOWGRAPH_EXISTS
+#if UNITY_DATAFLOWGRAPH_EXISTS
 using Unity.Burst;
 using Unity.DataFlowGraph;
 
@@ -7,12 +7,7 @@ namespace Unity.Physics
     /// <summary>
     /// DataFlowGraph node that performs a Collider Cast query on a CollisionWorld.
     /// </summary>
-    public class ColliderCastNode :
-#if UNITY_DATAFLOWGRAPH_0_17_OR_NEWER
-        KernelNodeDefinition<ColliderCastNode.KernelDefs>
-#else
-        NodeDefinition<ColliderCastNode.Data, ColliderCastNode.SimPorts, ColliderCastNode.KernelData, ColliderCastNode.KernelDefs, ColliderCastNode.Kernel>
-#endif
+    public class ColliderCastNode : KernelNodeDefinition<ColliderCastNode.KernelDefs>
     {
         public struct SimPorts : ISimulationPortDefinition
         {
@@ -38,7 +33,7 @@ namespace Unity.Physics
         [BurstCompile]
         public struct Kernel : IGraphKernel<KernelData, KernelDefs>
         {
-            public void Execute(RenderContext ctx, KernelData data, ref KernelDefs ports)
+            public void Execute(RenderContext ctx, in KernelData data, ref KernelDefs ports)
             {
                 var collisionWorldProxy = ctx.Resolve(ports.CollisionWorld);
                 if (!collisionWorldProxy.IsCreated)

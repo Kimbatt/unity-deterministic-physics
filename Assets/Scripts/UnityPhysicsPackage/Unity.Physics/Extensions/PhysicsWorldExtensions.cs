@@ -7,18 +7,6 @@ namespace UnityS.Physics.Extensions
     // Utility functions acting on a physics world
     public static class PhysicsWorldExtensions
     {
-        // Find the index in the Bodies array of a particular Rigid Body from its Entity
-        public static int GetRigidBodyIndex(this in PhysicsWorld world, Entity entity)
-        {
-            int idx = 0;
-            for( int i = 0; i < world.Bodies.Length; i++)
-            {
-                if (world.Bodies[i].Entity == entity) break;
-                idx++;
-            }
-            return (idx < world.NumBodies) ? idx : -1;
-        }
-
         public static CollisionFilter GetCollisionFilter(this in PhysicsWorld world, int rigidBodyIndex)
         {
             CollisionFilter filter = CollisionFilter.Default;
@@ -63,7 +51,6 @@ namespace UnityS.Physics.Extensions
         public static float3 GetCenterOfMass(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return float3.zero;
-            
             return world.MotionDatas[rigidBodyIndex].WorldFromMotion.pos;
         }
 
@@ -190,7 +177,7 @@ namespace UnityS.Physics.Extensions
 
             Unity.Collections.NativeArray<MotionVelocity> motionVelocities = world.MotionVelocities;
             MotionVelocity mv = motionVelocities[rigidBodyIndex];
-            mv.ApplyLinearImpulse(linearImpulse); 
+            mv.ApplyLinearImpulse(linearImpulse);
             mv.ApplyAngularImpulse(angularImpulseMotionSpace);
             motionVelocities[rigidBodyIndex] = mv;
         }

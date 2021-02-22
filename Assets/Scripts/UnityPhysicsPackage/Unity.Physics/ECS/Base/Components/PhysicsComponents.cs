@@ -23,7 +23,7 @@ namespace UnityS.Physics
         public unsafe Collider* ColliderPtr => (Collider*)Value.GetUnsafePtr();
         public MassProperties MassProperties => Value.IsCreated ? Value.Value.MassProperties : MassProperties.UnitSphere;
     }
-    
+
     // The mass properties of a rigid body.
     // If not present, the rigid body has infinite mass and inertia.
     public struct PhysicsMass : IComponentData
@@ -146,9 +146,7 @@ namespace UnityS.Physics
         public int SolverIterationCount;
         public Solver.StabilizationHeuristicSettings SolverStabilizationHeuristicSettings;
 
-        // DOTS doesn't yet expose the number of worker threads, which is needed for tuning the simulation.
-        // For optimal physics performance set this to the number of physical CPU cores on your target device.
-        public int ThreadCountHint;
+        public byte MultiThreaded;
 
         // Whether to synchronize collision world after physics step to enable precise query results.
         // Note that `BuildPhysicsWorld` will do this work on the following frame anyway, so only use this option when
@@ -163,7 +161,7 @@ namespace UnityS.Physics
             Gravity = new float3(sfloat.Zero, sfloat.FromRaw(0xc11cf5c3), sfloat.Zero),
             SolverIterationCount = 4,
             SolverStabilizationHeuristicSettings = Solver.StabilizationHeuristicSettings.Default,
-            ThreadCountHint = 8, // This is a guess. Prefer to overestimate than underestimate.
+            MultiThreaded = 1,
             SynchronizeCollisionWorld = 0
         };
     }
@@ -179,9 +177,9 @@ namespace UnityS.Physics
         {
             void* Ptr;
             int Size;
-           
+
             public bool IsCreated => Ptr != null;
-            
+
             public NativeArrayProxy(NativeArray<T> nativeArray)
             {
                 Ptr = nativeArray.GetUnsafeReadOnlyPtr();
@@ -197,7 +195,7 @@ namespace UnityS.Physics
             public NativeArray<T> ToArray(AtomicSafetyManager* safetyManager)
             {
                 var nativeArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>((void*)Ptr, Size, Allocator.Invalid);
-                safetyManager->MarkNativeArrayAsReadOnly(ref nativeArray); 
+                safetyManager->MarkNativeArrayAsReadOnly(ref nativeArray);
                 return nativeArray;
             }
         }
@@ -211,7 +209,7 @@ namespace UnityS.Physics
             NativeArrayProxy<int> BranchCount;
 
             public bool IsCreated => Nodes.IsCreated && NodeFilters.IsCreated && BodyFilters.IsCreated && Ranges.IsCreated && BranchCount.IsCreated;
-            
+
             public BroadPhaseTreeProxy(Broadphase.Tree tree)
             {
                 Nodes = new NativeArrayProxy<BoundingVolumeHierarchy.Node>(tree.Nodes);
@@ -242,7 +240,7 @@ namespace UnityS.Physics
         readonly AtomicSafetyManager* m_SafetyManager;
 
         public bool IsCreated => m_Bodies.IsCreated && m_StaticTree.IsCreated && m_DynamicTree.IsCreated;
-        
+
         internal CollisionWorldProxy(CollisionWorld collisionWorld, AtomicSafetyManager* safetyManager)
         {
             m_Bodies = new NativeArrayProxy<RigidBody>(collisionWorld.Bodies);

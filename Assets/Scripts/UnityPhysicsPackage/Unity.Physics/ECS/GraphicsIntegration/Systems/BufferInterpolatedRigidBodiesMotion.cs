@@ -81,7 +81,7 @@ namespace UnityS.Physics.GraphicsIntegration
                 RotationType = GetComponentTypeHandle<Rotation>(true),
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>()
-            }.ScheduleParallel(InterpolatedDynamicBodiesGroup, Dependency);
+            }.ScheduleParallel(InterpolatedDynamicBodiesGroup, 1, Dependency);
 
             // Combine implicit output dependency with user one
             m_OutputDependency = Dependency;
@@ -94,22 +94,22 @@ namespace UnityS.Physics.GraphicsIntegration
         }
 
         [BurstCompile]
-        unsafe struct UpdateInterpolationBuffersJob : IJobChunk
+        unsafe struct UpdateInterpolationBuffersJob : IJobEntityBatch
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             [ReadOnly] public ComponentTypeHandle<Translation> TranslationType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
             public ComponentTypeHandle<PhysicsGraphicalInterpolationBuffer> InterpolationBufferType;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
-                NativeArray<PhysicsVelocity> physicsVelocities = chunk.GetNativeArray(PhysicsVelocityType);
-                NativeArray<Translation> positions = chunk.GetNativeArray(TranslationType);
-                NativeArray<Rotation> orientations = chunk.GetNativeArray(RotationType);
-                NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = chunk.GetNativeArray(InterpolationBufferType);
+                NativeArray<PhysicsVelocity> physicsVelocities = batchInChunk.GetNativeArray(PhysicsVelocityType);
+                NativeArray<Translation> positions = batchInChunk.GetNativeArray(TranslationType);
+                NativeArray<Rotation> orientations = batchInChunk.GetNativeArray(RotationType);
+                NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = batchInChunk.GetNativeArray(InterpolationBufferType);
 
                 var dst = interpolationBuffers.GetUnsafePtr();
-                var count = chunk.Count;
+                var count = batchInChunk.Count;
 
                 var sizeBuffer = UnsafeUtility.SizeOf<PhysicsGraphicalInterpolationBuffer>();
                 var sizeOrientation = UnsafeUtility.SizeOf<quaternion>();

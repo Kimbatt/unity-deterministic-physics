@@ -30,17 +30,9 @@ namespace UnityS.Physics
             set => Ray.Displacement = value - Ray.Origin;
         }
 
-        public ColliderCastInput(Collider* collider, quaternion orientation, Ray ray)
-        {
-            QueryContext = default;
-            Collider = collider;
-            Orientation = orientation;
-            Ray = ray;
-        }
-
         internal Ray Ray;
         internal QueryContext QueryContext;
-        
+
         public override string ToString() =>
             $"RaycastInput {{ Start = {Start}, End = {End}, Collider = {Collider->Type}, Orientation = {Orientation} }}";
     }
@@ -69,6 +61,12 @@ namespace UnityS.Physics
         /// <summary>
         ///
         /// </summary>
+        /// <value> Returns Material of queried leaf collider</value>
+        public Material Material { get; set; }
+
+        /// <summary>
+        ///
+        /// </summary>
         /// <value> Returns Entity of queried body</value>
         public Entity Entity { get; set; }
 
@@ -86,7 +84,6 @@ namespace UnityS.Physics
 
         public override string ToString() =>
             $"ColliderCastHit {{ Fraction = {Fraction}, RigidBodyIndex = {RigidBodyIndex}, ColliderKey = {ColliderKey}, Entity = {Entity}, Position = {Position}, SurfaceNormal = {SurfaceNormal} }}";
-        
     }
 
     // Collider cast query implementations
@@ -175,6 +172,7 @@ namespace UnityS.Physics
                     hit.Fraction = fraction;
                     hit.RigidBodyIndex = input.QueryContext.RigidBodyIndex;
                     hit.ColliderKey = input.QueryContext.ColliderKey;
+                    hit.Material = ((ConvexColliderHeader*)target)->Material;
                     hit.Entity = input.QueryContext.Entity;
 
                     return true;
@@ -214,7 +212,7 @@ namespace UnityS.Physics
             public bool ColliderCastLeaf<T>(ColliderCastInput input, int primitiveKey, ref T collector)
                 where T : struct, ICollector<ColliderCastHit>
             {
-                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter);
+                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
 
                 if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, filter)) // TODO: could do this check within GetPrimitive()
                 {
@@ -227,7 +225,7 @@ namespace UnityS.Physics
                 bool acceptHit = false;
 
                 var polygon = new PolygonCollider();
-                polygon.InitEmpty();
+                polygon.InitNoVertices(CollisionFilter.Default, material);
                 for (int polygonIndex = 0; polygonIndex < numPolygons; polygonIndex++)
                 {
                     sfloat fraction = collector.MaxFraction;
@@ -303,6 +301,7 @@ namespace UnityS.Physics
             where T : struct, ICollector<ColliderCastHit>
         {
             ref Terrain terrain = ref terrainCollider->Terrain;
+            Material material = terrainCollider->Material;
 
             bool hadHit = false;
 
@@ -355,7 +354,7 @@ namespace UnityS.Physics
 
                         // Test each triangle in the quad
                         var polygon = new PolygonCollider();
-                        polygon.InitEmpty();
+                        polygon.InitNoVertices(CollisionFilter.Default, material);
                         for (int iTriangle = 0; iTriangle < 2; iTriangle++)
                         {
                             // Cast
