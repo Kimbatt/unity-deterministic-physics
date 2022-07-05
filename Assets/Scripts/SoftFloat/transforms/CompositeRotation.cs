@@ -37,7 +37,7 @@ namespace UnityS.Transforms
     }
 
     // CompositeRotation = RotationPivotTranslation * RotationPivot * Rotation * PostRotation * RotationPivot^-1
-    public abstract class CompositeRotationSystem : JobComponentSystem
+    public abstract partial class CompositeRotationSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -375,7 +375,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var compositeRotationType = GetComponentTypeHandle<CompositeRotation>(false);
             var rotationType = GetComponentTypeHandle<Rotation>(true);
@@ -392,8 +392,7 @@ namespace UnityS.Transforms
                 RotationPivotTranslationTypeHandle = rotationPivotTranslationType,
                 LastSystemVersion = LastSystemVersion
             };
-            var toCompositeRotationJobHandle = toCompositeRotationJob.Schedule(m_Group, inputDeps);
-            return toCompositeRotationJobHandle;
+            toCompositeRotationJob.Schedule(m_Group);
         }
     }
 }

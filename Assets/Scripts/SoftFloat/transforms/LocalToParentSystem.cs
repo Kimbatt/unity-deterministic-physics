@@ -8,7 +8,7 @@ using UnityS.Mathematics;
 
 namespace UnityS.Transforms
 {
-    public abstract class LocalToParentSystem : JobComponentSystem
+    public abstract partial class LocalToParentSystem : SystemBase
     {
         private EntityQuery m_RootsGroup;
         private EntityQueryMask m_LocalToWorldWriteGroupMask;
@@ -103,7 +103,7 @@ namespace UnityS.Transforms
             }));
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var localToWorldType = GetComponentTypeHandle<LocalToWorld>(true);
             var childType = GetBufferTypeHandle<Child>(true);
@@ -121,8 +121,7 @@ namespace UnityS.Transforms
                 LocalToWorldWriteGroupMask = m_LocalToWorldWriteGroupMask,
                 LastSystemVersion = LastSystemVersion
             };
-            var updateHierarchyJobHandle = updateHierarchyJob.Schedule(m_RootsGroup, inputDeps);
-            return updateHierarchyJobHandle;
+            updateHierarchyJob.Schedule(m_RootsGroup);
         }
     }
 }

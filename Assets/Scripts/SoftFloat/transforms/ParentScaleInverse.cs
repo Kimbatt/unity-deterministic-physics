@@ -23,7 +23,7 @@ namespace UnityS.Transforms
     // ParentScaleInverse = Parent.CompositeScale^-1
     // (or) ParentScaleInverse = Parent.Scale^-1
     // (or) ParentScaleInverse = Parent.NonUniformScale^-1
-    public abstract class ParentScaleInverseSystem : JobComponentSystem
+    public abstract partial class ParentScaleInverseSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -133,7 +133,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var toParentScaleInverseJob = new ToChildParentScaleInverse
             {
@@ -144,8 +144,7 @@ namespace UnityS.Transforms
                 ParentScaleInverseFromEntity = GetComponentDataFromEntity<ParentScaleInverse>(),
                 LastSystemVersion = LastSystemVersion
             };
-            var toParentScaleInverseJobHandle = toParentScaleInverseJob.Schedule(m_Group, inputDeps);
-            return toParentScaleInverseJobHandle;
+            toParentScaleInverseJob.Schedule(m_Group);
         }
     }
 }

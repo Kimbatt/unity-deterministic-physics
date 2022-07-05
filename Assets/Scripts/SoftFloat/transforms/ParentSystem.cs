@@ -8,7 +8,7 @@ using Unity.Profiling;
 
 namespace UnityS.Transforms
 {
-    public abstract class ParentSystem : JobComponentSystem
+    public abstract partial class ParentSystem : SystemBase
     {
         EntityQuery m_NewParentsGroup;
         EntityQuery m_RemovedParentsGroup;
@@ -48,9 +48,9 @@ namespace UnityS.Transforms
         [BurstCompile]
         struct GatherChangedParents : IJobChunk
         {
-            public NativeMultiHashMap<Entity, Entity>.ParallelWriter ParentChildrenToAdd;
-            public NativeMultiHashMap<Entity, Entity>.ParallelWriter ParentChildrenToRemove;
-            public NativeHashMap<Entity, int>.ParallelWriter UniqueParents;
+            public NativeParallelMultiHashMap<Entity, Entity>.ParallelWriter ParentChildrenToAdd;
+            public NativeParallelMultiHashMap<Entity, Entity>.ParallelWriter ParentChildrenToRemove;
+            public NativeParallelHashMap<Entity, int>.ParallelWriter UniqueParents;
             public ComponentTypeHandle<PreviousParent> PreviousParentTypeHandle;
 
             [ReadOnly] public ComponentTypeHandle<Parent> ParentTypeHandle;
@@ -95,7 +95,7 @@ namespace UnityS.Transforms
         [BurstCompile]
         struct FindMissingChild : IJob
         {
-            [ReadOnly] public NativeHashMap<Entity, int> UniqueParents;
+            [ReadOnly] public NativeParallelHashMap<Entity, int> UniqueParents;
             [ReadOnly] public BufferFromEntity<Child> ChildFromEntity;
             public NativeList<Entity> ParentsMissingChild;
 
@@ -116,9 +116,9 @@ namespace UnityS.Transforms
         [BurstCompile]
         struct FixupChangedChildren : IJob
         {
-            [ReadOnly] public NativeMultiHashMap<Entity, Entity> ParentChildrenToAdd;
-            [ReadOnly] public NativeMultiHashMap<Entity, Entity> ParentChildrenToRemove;
-            [ReadOnly] public NativeHashMap<Entity, int> UniqueParents;
+            [ReadOnly] public NativeParallelMultiHashMap<Entity, Entity> ParentChildrenToAdd;
+            [ReadOnly] public NativeParallelMultiHashMap<Entity, Entity> ParentChildrenToRemove;
+            [ReadOnly] public NativeParallelHashMap<Entity, int> UniqueParents;
 
             public BufferFromEntity<Child> ChildFromEntity;
 
@@ -275,9 +275,9 @@ namespace UnityS.Transforms
             // 2. Get (Parent,Child) to add
             // 3. Get unique Parent change list
             // 4. Set PreviousParent to new Parent
-            var parentChildrenToAdd = new NativeMultiHashMap<Entity, Entity>(count, Allocator.TempJob);
-            var parentChildrenToRemove = new NativeMultiHashMap<Entity, Entity>(count, Allocator.TempJob);
-            var uniqueParents = new NativeHashMap<Entity, int>(count, Allocator.TempJob);
+            var parentChildrenToAdd = new NativeParallelMultiHashMap<Entity, Entity>(count, Allocator.TempJob);
+            var parentChildrenToRemove = new NativeParallelMultiHashMap<Entity, Entity>(count, Allocator.TempJob);
+            var uniqueParents = new NativeParallelHashMap<Entity, int>(count, Allocator.TempJob);
             var gatherChangedParentsJob = new GatherChangedParents
             {
                 ParentChildrenToAdd = parentChildrenToAdd.AsParallelWriter(),
@@ -367,9 +367,9 @@ namespace UnityS.Transforms
             previousParents.Dispose();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
-            inputDeps.Complete(); // #todo
+            Dependency.Complete(); // #todo
 
             k_ProfileDeletedParents.Begin();
             UpdateDeletedParents();
@@ -386,8 +386,6 @@ namespace UnityS.Transforms
             k_ProfileChangeParents.Begin();
             UpdateChangeParents();
             k_ProfileChangeParents.End();
-
-            return new JobHandle();
         }
     }
 }

@@ -33,7 +33,7 @@ namespace UnityS.Transforms
 
     // CompositeScale = ScalePivotTranslation * ScalePivot * Scale * ScalePivot^-1
     // (or) CompositeScale = ScalePivotTranslation * ScalePivot * NonUniformScale * ScalePivot^-1
-    public abstract class CompositeScaleSystem : JobComponentSystem
+    public abstract partial class CompositeScaleSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -290,7 +290,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var compositeScaleType = GetComponentTypeHandle<CompositeScale>(false);
             var scaleType = GetComponentTypeHandle<Scale>(true);
@@ -307,8 +307,7 @@ namespace UnityS.Transforms
                 ScalePivotTranslationTypeHandle = scalePivotTranslationType,
                 LastSystemVersion = LastSystemVersion
             };
-            var toCompositeScaleJobHandle = toCompositeScaleJob.Schedule(m_Group, inputDeps);
-            return toCompositeScaleJobHandle;
+            toCompositeScaleJob.Schedule(m_Group);
         }
     }
 }

@@ -18,7 +18,7 @@ namespace UnityS.Transforms
         public float3 Position => new float3(Value.c3.x, Value.c3.y, Value.c3.z);
     }
 
-    public abstract class WorldToLocalSystem : JobComponentSystem
+    public abstract partial class WorldToLocalSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -58,7 +58,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var toWorldToLocalJob = new ToWorldToLocal
             {
@@ -66,8 +66,7 @@ namespace UnityS.Transforms
                 WorldToLocalTypeHandle = GetComponentTypeHandle<WorldToLocal>(),
                 LastSystemVersion = LastSystemVersion
             };
-            var toWorldToLocalJobHandle = toWorldToLocalJob.Schedule(m_Group, inputDeps);
-            return toWorldToLocalJobHandle;
+            toWorldToLocalJob.Schedule(m_Group);
         }
     }
 }

@@ -29,7 +29,7 @@ namespace UnityS.Transforms
     // (or) LocalToParent = Translation * ParentScaleInverse * Rotation * CompositeScale
     // (or) LocalToParent = Translation * ParentScaleInverse * CompositeRotation * CompositeScale
 
-    public abstract class TRSToLocalToParentSystem : JobComponentSystem
+    public abstract partial class TRSToLocalToParentSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -505,7 +505,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var rotationType = GetComponentTypeHandle<Rotation>(true);
             var compositeRotationType = GetComponentTypeHandle<CompositeRotation>(true);
@@ -527,8 +527,7 @@ namespace UnityS.Transforms
                 LocalToParentTypeHandle = localToWorldType,
                 LastSystemVersion = LastSystemVersion
             };
-            var trsToLocalToParentJobHandle = trsToLocalToParentJob.Schedule(m_Group, inputDeps);
-            return trsToLocalToParentJobHandle;
+            trsToLocalToParentJob.Schedule(m_Group);
         }
     }
 }

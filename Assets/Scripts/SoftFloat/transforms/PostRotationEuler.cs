@@ -64,7 +64,7 @@ namespace UnityS.Transforms
     // (or) PostRotation = PostRotationEulerYZX
     // (or) PostRotation = PostRotationEulerZXY
     // (or) PostRotation = PostRotationEulerZYX
-    public abstract class PostRotationEulerSystem : JobComponentSystem
+    public abstract partial class PostRotationEulerSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -196,7 +196,7 @@ namespace UnityS.Transforms
             }
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDependencies)
+        protected override void OnUpdate()
         {
             var job = new PostRotationEulerToPostRotation()
             {
@@ -209,7 +209,7 @@ namespace UnityS.Transforms
                 PostRotationEulerZyxTypeHandle = GetComponentTypeHandle<PostRotationEulerZYX>(true),
                 LastSystemVersion = LastSystemVersion
             };
-            return job.Schedule(m_Group, inputDependencies);
+            job.Schedule(m_Group);
         }
     }
 }
