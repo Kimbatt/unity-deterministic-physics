@@ -8,7 +8,7 @@ namespace UnityS.Physics.Systems
     // Simulates the physics world forwards in time
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld)), AlwaysUpdateSystem]
-    public class StepPhysicsWorld : SystemBase, IPhysicsSystem
+    public partial class StepPhysicsWorld : SystemBase, IPhysicsSystem
     {
         private JobHandle m_InputDependency;
         private JobHandle m_OutputDependency;
@@ -36,9 +36,9 @@ namespace UnityS.Physics.Systems
 
         protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_ExportPhysicsWorldSystem = World.GetOrCreateSystem<ExportPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystemManaged<BuildPhysicsWorld>();
+            m_ExportPhysicsWorldSystem = World.GetOrCreateSystemManaged<ExportPhysicsWorld>();
+            m_EndFramePhysicsSystem = World.GetOrCreateSystemManaged<EndFramePhysicsSystem>();
 
 #if !NET_DOTS
             Assert.AreEqual(Enum.GetValues(typeof(SimulationType)).Length, k_NumSimulationTypes);
@@ -88,7 +88,7 @@ namespace UnityS.Physics.Systems
                 Simulation = m_SimulationCreators[(int)stepComponent.SimulationType]();
             }
 
-            sfloat timeStep = (sfloat)Time.DeltaTime;
+            sfloat timeStep = (sfloat)SystemAPI.Time.DeltaTime;
 
             // Schedule the simulation jobs
             Simulation.ScheduleStepJobs(new SimulationStepInput()

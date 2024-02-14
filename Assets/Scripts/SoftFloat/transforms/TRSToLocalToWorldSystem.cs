@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -22,7 +23,7 @@ namespace UnityS.Transforms
     // (or) LocalToWorld = Translation * CompositeRotation * Scale
     // (or) LocalToWorld = Translation * Rotation * CompositeScale
     // (or) LocalToWorld = Translation * CompositeRotation * CompositeScale
-    public abstract class TRSToLocalToWorldSystem : JobComponentSystem
+    public abstract partial class TRSToLocalToWorldSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -38,7 +39,7 @@ namespace UnityS.Transforms
             public ComponentTypeHandle<LocalToWorld> LocalToWorldTypeHandle;
             public uint LastSystemVersion;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int entityOffset)
+            public void Execute(in ArchetypeChunk chunk, int chunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 bool changed =
                     chunk.DidOrderChange(LastSystemVersion) ||
@@ -80,7 +81,11 @@ namespace UnityS.Transforms
                     {
                         for (int i = 0; i < count; i++)
                         {
-                            var scale = hasNonUniformScale ? float4x4.Scale(chunkNonUniformScales[i].Value) : (hasScale ? float4x4.Scale(new float3(chunkScales[i].Value)) : chunkCompositeScales[i].Value);
+                            var scale = hasNonUniformScale
+                                ? float4x4.Scale(chunkNonUniformScales[i].Value)
+                                : (hasScale
+                                    ? float4x4.Scale(new float3(chunkScales[i].Value))
+                                    : chunkCompositeScales[i].Value);
 
                             chunkLocalToWorld[i] = new LocalToWorld
                             {
@@ -106,7 +111,11 @@ namespace UnityS.Transforms
                     {
                         for (int i = 0; i < count; i++)
                         {
-                            var scale = hasNonUniformScale ? float4x4.Scale(chunkNonUniformScales[i].Value) : (hasScale ? float4x4.Scale(new float3(chunkScales[i].Value)) : chunkCompositeScales[i].Value);
+                            var scale = hasNonUniformScale
+                                ? float4x4.Scale(chunkNonUniformScales[i].Value)
+                                : (hasScale
+                                    ? float4x4.Scale(new float3(chunkScales[i].Value))
+                                    : chunkCompositeScales[i].Value);
                             var translation = chunkTranslations[i].Value;
 
                             chunkLocalToWorld[i] = new LocalToWorld
@@ -137,7 +146,11 @@ namespace UnityS.Transforms
                         for (int i = 0; i < count; i++)
                         {
                             var rotation = chunkCompositeRotations[i].Value;
-                            var scale = hasNonUniformScale ? float4x4.Scale(chunkNonUniformScales[i].Value) : (hasScale ? float4x4.Scale(new float3(chunkScales[i].Value)) : chunkCompositeScales[i].Value);
+                            var scale = hasNonUniformScale
+                                ? float4x4.Scale(chunkNonUniformScales[i].Value)
+                                : (hasScale
+                                    ? float4x4.Scale(new float3(chunkScales[i].Value))
+                                    : chunkCompositeScales[i].Value);
 
                             chunkLocalToWorld[i] = new LocalToWorld
                             {
@@ -166,11 +179,15 @@ namespace UnityS.Transforms
                         {
                             var rotation = chunkCompositeRotations[i].Value;
                             var translation = chunkTranslations[i].Value;
-                            var scale = hasNonUniformScale ? float4x4.Scale(chunkNonUniformScales[i].Value) : (hasScale ? float4x4.Scale(new float3(chunkScales[i].Value)) : chunkCompositeScales[i].Value);
+                            var scale = hasNonUniformScale
+                                ? float4x4.Scale(chunkNonUniformScales[i].Value)
+                                : (hasScale
+                                    ? float4x4.Scale(new float3(chunkScales[i].Value))
+                                    : chunkCompositeScales[i].Value);
 
                             chunkLocalToWorld[i] = new LocalToWorld
                             {
-                                Value = math.mul(math.mul(float4x4.Translate(translation), rotation) , scale)
+                                Value = math.mul(math.mul(float4x4.Translate(translation), rotation), scale)
                             };
                         }
                     }
@@ -196,7 +213,11 @@ namespace UnityS.Transforms
                         for (int i = 0; i < count; i++)
                         {
                             var rotation = chunkRotations[i].Value;
-                            var scale = hasNonUniformScale ? float4x4.Scale(chunkNonUniformScales[i].Value) : (hasScale ? float4x4.Scale(new float3(chunkScales[i].Value)) : chunkCompositeScales[i].Value);
+                            var scale = hasNonUniformScale
+                                ? float4x4.Scale(chunkNonUniformScales[i].Value)
+                                : (hasScale
+                                    ? float4x4.Scale(new float3(chunkScales[i].Value))
+                                    : chunkCompositeScales[i].Value);
 
                             chunkLocalToWorld[i] = new LocalToWorld
                             {
@@ -225,7 +246,11 @@ namespace UnityS.Transforms
                         {
                             var rotation = chunkRotations[i].Value;
                             var translation = chunkTranslations[i].Value;
-                            var scale = hasNonUniformScale ? float4x4.Scale(chunkNonUniformScales[i].Value) : (hasScale ? float4x4.Scale(new float3(chunkScales[i].Value)) : chunkCompositeScales[i].Value);
+                            var scale = hasNonUniformScale
+                                ? float4x4.Scale(chunkNonUniformScales[i].Value)
+                                : (hasScale
+                                    ? float4x4.Scale(new float3(chunkScales[i].Value))
+                                    : chunkCompositeScales[i].Value);
 
                             chunkLocalToWorld[i] = new LocalToWorld
                             {
@@ -258,28 +283,20 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
-            var rotationType = GetComponentTypeHandle<Rotation>(true);
-            var compositeRotationType = GetComponentTypeHandle<CompositeRotation>(true);
-            var translationType = GetComponentTypeHandle<Translation>(true);
-            var nonUniformScaleType = GetComponentTypeHandle<NonUniformScale>(true);
-            var scaleType = GetComponentTypeHandle<Scale>(true);
-            var compositeScaleType = GetComponentTypeHandle<CompositeScale>(true);
-            var localToWorldType = GetComponentTypeHandle<LocalToWorld>(false);
             var trsToLocalToWorldJob = new TRSToLocalToWorld()
             {
-                RotationTypeHandle = rotationType,
-                CompositeRotationTypeHandle = compositeRotationType,
-                TranslationTypeHandle = translationType,
-                ScaleTypeHandle = scaleType,
-                NonUniformScaleTypeHandle = nonUniformScaleType,
-                CompositeScaleTypeHandle = compositeScaleType,
-                LocalToWorldTypeHandle = localToWorldType,
+                RotationTypeHandle = GetComponentTypeHandle<Rotation>(true),
+                CompositeRotationTypeHandle = GetComponentTypeHandle<CompositeRotation>(true),
+                TranslationTypeHandle = GetComponentTypeHandle<Translation>(true),
+                ScaleTypeHandle = GetComponentTypeHandle<Scale>(true),
+                NonUniformScaleTypeHandle = GetComponentTypeHandle<NonUniformScale>(true),
+                CompositeScaleTypeHandle = GetComponentTypeHandle<CompositeScale>(true),
+                LocalToWorldTypeHandle = GetComponentTypeHandle<LocalToWorld>(false),
                 LastSystemVersion = LastSystemVersion
             };
-            var trsToLocalToWorldJobHandle = trsToLocalToWorldJob.Schedule(m_Group, inputDeps);
-            return trsToLocalToWorldJobHandle;
+            trsToLocalToWorldJob.ScheduleParallel(m_Group, Dependency).Complete();
         }
     }
 }

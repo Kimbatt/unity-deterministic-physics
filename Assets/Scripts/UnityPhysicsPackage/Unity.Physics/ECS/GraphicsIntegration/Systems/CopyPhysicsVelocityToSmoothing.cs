@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -14,7 +15,7 @@ namespace UnityS.Physics.GraphicsIntegration
     /// </summary>
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(ExportPhysicsWorld))]
-    public class CopyPhysicsVelocityToSmoothing : SystemBase, IPhysicsSystem
+    public partial class CopyPhysicsVelocityToSmoothing : SystemBase, IPhysicsSystem
     {
         JobHandle m_InputDependency;
         JobHandle m_OutputDependency;
@@ -44,8 +45,8 @@ namespace UnityS.Physics.GraphicsIntegration
         {
             base.OnCreate();
 
-            m_ExportPhysicsWorld = World.GetOrCreateSystem<ExportPhysicsWorld>();
-            m_SmoothRigidBodiesGraphicalMotion = World.GetOrCreateSystem<SmoothRigidBodiesGraphicalMotion>();
+            m_ExportPhysicsWorld = World.GetOrCreateSystemManaged<ExportPhysicsWorld>();
+            m_SmoothRigidBodiesGraphicalMotion = World.GetOrCreateSystemManaged<SmoothRigidBodiesGraphicalMotion>();
 
             SmoothedDynamicBodiesGroup = GetEntityQuery(new EntityQueryDesc
             {
@@ -75,7 +76,7 @@ namespace UnityS.Physics.GraphicsIntegration
             {
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 PhysicsGraphicalSmoothingType = GetComponentTypeHandle<PhysicsGraphicalSmoothing>()
-            }.ScheduleParallel(SmoothedDynamicBodiesGroup, 1, Dependency);
+            }.ScheduleParallel(SmoothedDynamicBodiesGroup, Dependency);
 
             // Combine implicit output dependency with user one
             m_OutputDependency = Dependency;
@@ -88,12 +89,12 @@ namespace UnityS.Physics.GraphicsIntegration
         }
 
         [BurstCompile]
-        unsafe struct CopyPhysicsVelocityJob : IJobEntityBatch
+        unsafe struct CopyPhysicsVelocityJob : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             public ComponentTypeHandle<PhysicsGraphicalSmoothing> PhysicsGraphicalSmoothingType;
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
                 NativeArray<PhysicsVelocity> physicsVelocities = batchInChunk.GetNativeArray(PhysicsVelocityType);
                 NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = batchInChunk.GetNativeArray(PhysicsGraphicalSmoothingType);

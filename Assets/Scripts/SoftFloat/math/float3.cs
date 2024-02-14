@@ -15,7 +15,6 @@ using System.Diagnostics;
 namespace UnityS.Mathematics
 {
     [DebuggerTypeProxy(typeof(float3.DebuggerProxy))]
-    [System.Serializable]
     public partial struct float3 : System.IEquatable<float3>, IFormattable
     {
         public sfloat x;

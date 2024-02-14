@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -64,7 +65,7 @@ namespace UnityS.Transforms
     // (or) PostRotation = PostRotationEulerYZX
     // (or) PostRotation = PostRotationEulerZXY
     // (or) PostRotation = PostRotationEulerZYX
-    public abstract class PostRotationEulerSystem : JobComponentSystem
+    public abstract partial class PostRotationEulerSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -101,7 +102,7 @@ namespace UnityS.Transforms
             [ReadOnly] public ComponentTypeHandle<PostRotationEulerZYX> PostRotationEulerZyxTypeHandle;
             public uint LastSystemVersion;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(in ArchetypeChunk chunk, int chunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 if (chunk.Has(PostRotationEulerXyzTypeHandle))
                 {
@@ -196,7 +197,7 @@ namespace UnityS.Transforms
             }
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDependencies)
+        protected override void OnUpdate()
         {
             var job = new PostRotationEulerToPostRotation()
             {
@@ -209,7 +210,7 @@ namespace UnityS.Transforms
                 PostRotationEulerZyxTypeHandle = GetComponentTypeHandle<PostRotationEulerZYX>(true),
                 LastSystemVersion = LastSystemVersion
             };
-            return job.Schedule(m_Group, inputDependencies);
+            Dependency = job.ScheduleParallel(m_Group, Dependency);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -23,7 +24,7 @@ namespace UnityS.Transforms
     // ParentScaleInverse = Parent.CompositeScale^-1
     // (or) ParentScaleInverse = Parent.Scale^-1
     // (or) ParentScaleInverse = Parent.NonUniformScale^-1
-    public abstract class ParentScaleInverseSystem : JobComponentSystem
+    public abstract partial class ParentScaleInverseSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -34,10 +35,13 @@ namespace UnityS.Transforms
             [ReadOnly] public ComponentTypeHandle<NonUniformScale> NonUniformScaleTypeHandle;
             [ReadOnly] public ComponentTypeHandle<CompositeScale> CompositeScaleTypeHandle;
             [ReadOnly] public BufferTypeHandle<Child> ChildTypeHandle;
-            [NativeDisableContainerSafetyRestriction] public ComponentDataFromEntity<ParentScaleInverse> ParentScaleInverseFromEntity;
+
+            [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<ParentScaleInverse> ParentScaleInverseFromEntity;
+
             public uint LastSystemVersion;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(in ArchetypeChunk chunk, int chunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 var hasScale = chunk.Has(ScaleTypeHandle);
                 var hasNonUniformScale = chunk.Has(NonUniformScaleTypeHandle);
@@ -46,7 +50,7 @@ namespace UnityS.Transforms
                 if (hasCompositeScale)
                 {
                     var didChange = chunk.DidChange(CompositeScaleTypeHandle, LastSystemVersion) ||
-                        chunk.DidChange(ChildTypeHandle, LastSystemVersion);
+                                    chunk.DidChange(ChildTypeHandle, LastSystemVersion);
                     if (!didChange)
                         return;
 
@@ -62,14 +66,14 @@ namespace UnityS.Transforms
                             if (!ParentScaleInverseFromEntity.HasComponent(childEntity))
                                 continue;
 
-                            ParentScaleInverseFromEntity[childEntity] = new ParentScaleInverse {Value = inverseScale};
+                            ParentScaleInverseFromEntity[childEntity] = new ParentScaleInverse { Value = inverseScale };
                         }
                     }
                 }
                 else if (hasScale)
                 {
                     var didChange = chunk.DidChange(ScaleTypeHandle, LastSystemVersion) ||
-                        chunk.DidChange(ChildTypeHandle, LastSystemVersion);
+                                    chunk.DidChange(ChildTypeHandle, LastSystemVersion);
                     if (!didChange)
                         return;
 
@@ -85,14 +89,14 @@ namespace UnityS.Transforms
                             if (!ParentScaleInverseFromEntity.HasComponent(childEntity))
                                 continue;
 
-                            ParentScaleInverseFromEntity[childEntity] = new ParentScaleInverse {Value = inverseScale};
+                            ParentScaleInverseFromEntity[childEntity] = new ParentScaleInverse { Value = inverseScale };
                         }
                     }
                 }
                 else // if (hasNonUniformScale)
                 {
                     var didChange = chunk.DidChange(NonUniformScaleTypeHandle, LastSystemVersion) ||
-                        chunk.DidChange(ChildTypeHandle, LastSystemVersion);
+                                    chunk.DidChange(ChildTypeHandle, LastSystemVersion);
                     if (!didChange)
                         return;
 
@@ -108,7 +112,7 @@ namespace UnityS.Transforms
                             if (!ParentScaleInverseFromEntity.HasComponent(childEntity))
                                 continue;
 
-                            ParentScaleInverseFromEntity[childEntity] = new ParentScaleInverse {Value = inverseScale};
+                            ParentScaleInverseFromEntity[childEntity] = new ParentScaleInverse { Value = inverseScale };
                         }
                     }
                 }
@@ -133,7 +137,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var toParentScaleInverseJob = new ToChildParentScaleInverse
             {
@@ -141,11 +145,10 @@ namespace UnityS.Transforms
                 NonUniformScaleTypeHandle = GetComponentTypeHandle<NonUniformScale>(true),
                 CompositeScaleTypeHandle = GetComponentTypeHandle<CompositeScale>(true),
                 ChildTypeHandle = GetBufferTypeHandle<Child>(true),
-                ParentScaleInverseFromEntity = GetComponentDataFromEntity<ParentScaleInverse>(),
+                ParentScaleInverseFromEntity = GetComponentLookup<ParentScaleInverse>(),
                 LastSystemVersion = LastSystemVersion
             };
-            var toParentScaleInverseJobHandle = toParentScaleInverseJob.Schedule(m_Group, inputDeps);
-            return toParentScaleInverseJobHandle;
+            Dependency = toParentScaleInverseJob.ScheduleParallel(m_Group, Dependency);
         }
     }
 }

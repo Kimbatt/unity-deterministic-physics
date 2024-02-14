@@ -255,7 +255,7 @@ namespace UnityS.Physics
                 {
                     case 3:
                     {
-                        var edgeMap = new NativeHashMap<ConvexHull.Edge, ConvexHull.Edge>(builder.NumFaceVertices, Allocator.Temp);
+                        var edgeMap = new NativeParallelHashMap<ConvexHull.Edge, ConvexHull.Edge>(builder.NumFaceVertices, Allocator.Temp);
                         for (ConvexHullBuilder.FaceEdge hullFace = builder.GetFirstFace(); hullFace.IsValid; hullFace = builder.GetNextFace(hullFace))
                         {
                             // Store the plane

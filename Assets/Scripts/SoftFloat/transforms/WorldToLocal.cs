@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -18,7 +19,7 @@ namespace UnityS.Transforms
         public float3 Position => new float3(Value.c3.x, Value.c3.y, Value.c3.z);
     }
 
-    public abstract class WorldToLocalSystem : JobComponentSystem
+    public abstract partial class WorldToLocalSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -29,7 +30,7 @@ namespace UnityS.Transforms
             public ComponentTypeHandle<WorldToLocal> WorldToLocalTypeHandle;
             public uint LastSystemVersion;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(in ArchetypeChunk chunk, int chunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 if (!chunk.DidChange(LocalToWorldTypeHandle, LastSystemVersion))
                     return;
@@ -40,7 +41,7 @@ namespace UnityS.Transforms
                 for (int i = 0; i < chunk.Count; i++)
                 {
                     var localToWorld = chunkLocalToWorld[i].Value;
-                    chunkWorldToLocal[i] = new WorldToLocal {Value = math.inverse(localToWorld)};
+                    chunkWorldToLocal[i] = new WorldToLocal { Value = math.inverse(localToWorld) };
                 }
             }
         }
@@ -58,7 +59,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var toWorldToLocalJob = new ToWorldToLocal
             {
@@ -66,8 +67,7 @@ namespace UnityS.Transforms
                 WorldToLocalTypeHandle = GetComponentTypeHandle<WorldToLocal>(),
                 LastSystemVersion = LastSystemVersion
             };
-            var toWorldToLocalJobHandle = toWorldToLocalJob.Schedule(m_Group, inputDeps);
-            return toWorldToLocalJobHandle;
+            Dependency = toWorldToLocalJob.ScheduleParallel(m_Group, this.Dependency);
         }
     }
 }
