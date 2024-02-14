@@ -18,7 +18,7 @@ namespace UnityS.Physics
         [NoAlias]
         private NativeArray<Joint> m_Joints;
         private int m_NumJoints; // number of joints currently in use
-        [NoAlias] internal NativeHashMap<Entity, int> EntityJointIndexMap;
+        [NoAlias] internal NativeParallelHashMap<Entity, int> EntityJointIndexMap;
 
         public NativeArray<MotionData> MotionDatas => m_MotionDatas.GetSubArray(0, m_NumMotions);
         public NativeArray<MotionVelocity> MotionVelocities => m_MotionVelocities.GetSubArray(0, m_NumMotions);
@@ -38,7 +38,7 @@ namespace UnityS.Physics
             m_Joints = new NativeArray<Joint>(numJoints, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             m_NumJoints = numJoints;
 
-            EntityJointIndexMap = new NativeHashMap<Entity, int>(numJoints, Allocator.Persistent);
+            EntityJointIndexMap = new NativeParallelHashMap<Entity, int>(numJoints, Allocator.Persistent);
         }
 
         public void Reset(int numMotions, int numJoints)
@@ -84,7 +84,7 @@ namespace UnityS.Physics
                 m_NumMotions = m_NumMotions,
                 m_Joints = new NativeArray<Joint>(m_Joints.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
                 m_NumJoints = m_NumJoints,
-                EntityJointIndexMap = new NativeHashMap<Entity, int>(m_Joints.Length, Allocator.Persistent),
+                EntityJointIndexMap = new NativeParallelHashMap<Entity, int>(m_Joints.Length, Allocator.Persistent),
             };
             clone.m_MotionDatas.CopyFrom(m_MotionDatas);
             clone.m_MotionVelocities.CopyFrom(m_MotionVelocities);

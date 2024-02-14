@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -12,7 +13,7 @@ namespace UnityS.Physics.Systems
     // A system which copies transforms and velocities from the physics world back to the original entity components.
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class ExportPhysicsWorld : SystemBase, IPhysicsSystem
+    public partial class ExportPhysicsWorld : SystemBase, IPhysicsSystem
     {
         private JobHandle m_InputDependency;
         private JobHandle m_OutputDependency;
@@ -22,13 +23,14 @@ namespace UnityS.Physics.Systems
 
         internal unsafe struct SharedData : IDisposable
         {
-            [NativeDisableUnsafePtrRestriction]
-            public AtomicSafetyManager* SafetyManager;
+            [NativeDisableUnsafePtrRestriction] public AtomicSafetyManager* SafetyManager;
 
             public static SharedData Create()
             {
                 var sharedData = new SharedData();
-                sharedData.SafetyManager = (AtomicSafetyManager*)UnsafeUtility.Malloc(UnsafeUtility.SizeOf<AtomicSafetyManager>(), 16, Allocator.Persistent);
+                sharedData.SafetyManager =
+                    (AtomicSafetyManager*)UnsafeUtility.Malloc(UnsafeUtility.SizeOf<AtomicSafetyManager>(), 16,
+                        Allocator.Persistent);
                 *sharedData.SafetyManager = AtomicSafetyManager.Create();
 
                 return sharedData;
@@ -49,8 +51,8 @@ namespace UnityS.Physics.Systems
 
         protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystemManaged<BuildPhysicsWorld>();
+            m_EndFramePhysicsSystem = World.GetOrCreateSystemManaged<EndFramePhysicsSystem>();
 
             m_SharedData = SharedData.Create();
 
@@ -81,15 +83,22 @@ namespace UnityS.Physics.Systems
             var rotationType = GetComponentTypeHandle<Rotation>();
             var velocityType = GetComponentTypeHandle<PhysicsVelocity>();
 
+            var chunkBaseEntityIndices2 =
+                m_BuildPhysicsWorldSystem.DynamicEntityGroup.CalculateBaseEntityIndexArrayAsync(
+                    this.World.UpdateAllocator.ToAllocator,
+                    handle, out JobHandle handleWithEntityIndicesCalculation);
+            handle = handleWithEntityIndicesCalculation;
+
             handle = new ExportDynamicBodiesJob
             {
+                ChunkBaseEntityIndices = chunkBaseEntityIndices2,
                 MotionVelocities = world.MotionVelocities,
                 MotionDatas = world.MotionDatas,
 
                 PositionType = positionType,
                 RotationType = rotationType,
                 VelocityType = velocityType
-            }.ScheduleParallel(m_BuildPhysicsWorldSystem.DynamicEntityGroup, 1, handle);
+            }.ScheduleParallel(m_BuildPhysicsWorldSystem.DynamicEntityGroup, handle);
 
             // Sync shared data.
             m_SharedData.Sync();
@@ -102,7 +111,7 @@ namespace UnityS.Physics.Systems
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                     SharedData = m_SharedData,
                     ProxyType = GetComponentTypeHandle<CollisionWorldProxy>()
-                }.ScheduleParallel(m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup, 1, handle);
+                }.ScheduleParallel(m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup, handle);
             }
 
             m_OutputDependency = handle;
@@ -128,8 +137,9 @@ namespace UnityS.Physics.Systems
         }
 
         [BurstCompile]
-        internal struct ExportDynamicBodiesJob : IJobEntityBatchWithIndex
+        internal struct ExportDynamicBodiesJob : IJobChunk
         {
+            [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
             [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
             [ReadOnly] public NativeArray<MotionData> MotionDatas;
 
@@ -137,8 +147,10 @@ namespace UnityS.Physics.Systems
             public ComponentTypeHandle<Rotation> RotationType;
             public ComponentTypeHandle<PhysicsVelocity> VelocityType;
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int entityStartIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
+                int entityStartIndex = ChunkBaseEntityIndices[batchIndex];
+
                 var chunkPositions = batchInChunk.GetNativeArray(PositionType);
                 var chunkRotations = batchInChunk.GetNativeArray(RotationType);
                 var chunkVelocities = batchInChunk.GetNativeArray(VelocityType);
@@ -161,14 +173,14 @@ namespace UnityS.Physics.Systems
         }
 
         [BurstCompile]
-        internal unsafe struct CopyCollisionWorld : IJobEntityBatch
+        internal unsafe struct CopyCollisionWorld : IJobChunk
         {
             [ReadOnly] public PhysicsWorld World;
             public SharedData SharedData;
             public ComponentTypeHandle<CollisionWorldProxy> ProxyType;
 
             //public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
                 NativeArray<CollisionWorldProxy> chunkProxies = batchInChunk.GetNativeArray(ProxyType);
 
@@ -181,7 +193,7 @@ namespace UnityS.Physics.Systems
 
         #region Integrity checks
 
-        internal JobHandle CheckIntegrity(JobHandle inputDeps, NativeHashMap<uint, long> integrityCheckMap)
+        internal JobHandle CheckIntegrity(JobHandle inputDeps, NativeParallelHashMap<uint, long> integrityCheckMap)
         {
             var positionType = GetComponentTypeHandle<Translation>(true);
             var rotationType = GetComponentTypeHandle<Rotation>(true);
@@ -205,7 +217,8 @@ namespace UnityS.Physics.Systems
                 PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkStaticBodyColliderIntegrity.Schedule(m_BuildPhysicsWorldSystem.StaticEntityGroup, inputDeps);
+            inputDeps = checkStaticBodyColliderIntegrity.Schedule(m_BuildPhysicsWorldSystem.StaticEntityGroup,
+                inputDeps);
 
             var checkTotalIntegrity = new CheckTotalIntegrity
             {
@@ -216,15 +229,16 @@ namespace UnityS.Physics.Systems
         }
 
         [BurstCompile]
-        internal struct CheckDynamicBodyIntegrity : IJobEntityBatch
+        internal struct CheckDynamicBodyIntegrity : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-            public NativeHashMap<uint, long> IntegrityCheckMap;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-            internal static void DecrementIfExists(NativeHashMap<uint, long> integrityCheckMap, uint systemVersion)
+            internal static void DecrementIfExists(NativeParallelHashMap<uint, long> integrityCheckMap,
+                uint systemVersion)
             {
                 if (integrityCheckMap.TryGetValue(systemVersion, out long occurences))
                 {
@@ -233,7 +247,7 @@ namespace UnityS.Physics.Systems
                 }
             }
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
                 DecrementIfExists(IntegrityCheckMap, batchInChunk.GetOrderVersion());
                 DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsVelocityType));
@@ -241,10 +255,12 @@ namespace UnityS.Physics.Systems
                 {
                     DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PositionType));
                 }
+
                 if (batchInChunk.Has(RotationType))
                 {
                     DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(RotationType));
                 }
+
                 if (batchInChunk.Has(PhysicsColliderType))
                 {
                     DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
@@ -256,16 +272,17 @@ namespace UnityS.Physics.Systems
         }
 
         [BurstCompile]
-        internal struct CheckColliderIntegrity : IJobEntityBatch
+        internal struct CheckColliderIntegrity : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-            public NativeHashMap<uint, long> IntegrityCheckMap;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
                 if (batchInChunk.Has(PhysicsColliderType))
                 {
-                    CheckDynamicBodyIntegrity.DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+                    CheckDynamicBodyIntegrity.DecrementIfExists(IntegrityCheckMap,
+                        batchInChunk.GetChangeVersion(PhysicsColliderType));
 
                     var colliders = batchInChunk.GetNativeArray(PhysicsColliderType);
                     CheckColliderFilterIntegrity(colliders);
@@ -276,7 +293,8 @@ namespace UnityS.Physics.Systems
         [BurstCompile]
         internal struct CheckTotalIntegrity : IJob
         {
-            public NativeHashMap<uint, long> IntegrityCheckMap;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
+
             public void Execute()
             {
                 var values = IntegrityCheckMap.GetValueArray(Allocator.Temp);
@@ -289,9 +307,11 @@ namespace UnityS.Physics.Systems
                         break;
                     }
                 }
+
                 if (!validIntegrity)
                 {
-                    SafetyChecks.ThrowInvalidOperationException("Adding/removing components or changing position/rotation/velocity/collider ECS data" +
+                    SafetyChecks.ThrowInvalidOperationException(
+                        "Adding/removing components or changing position/rotation/velocity/collider ECS data" +
                         " on dynamic entities during physics step");
                 }
             }
@@ -322,7 +342,8 @@ namespace UnityS.Physics.Systems
                         // If not, it means user has forgotten to call RefreshCollisionFilter() on the CompoundCollider.
                         if (!rootFilter.Equals(combinedFilter))
                         {
-                            SafetyChecks.ThrowInvalidOperationException("CollisionFilter of a compound collider is not a union of its children. " +
+                            SafetyChecks.ThrowInvalidOperationException(
+                                "CollisionFilter of a compound collider is not a union of its children. " +
                                 "You must call CompoundCollider.RefreshCollisionFilter() to update the root filter after changing child filters.");
                         }
                     }

@@ -7,7 +7,7 @@ using UnityS.Physics;
 using UnityS.Physics.Systems;
 using UnityS.Transforms;
 
-public class GameController : SystemBase
+public partial class GameController : SystemBase
 {
     public static GameController Instance;
 
@@ -16,16 +16,15 @@ public class GameController : SystemBase
 
     private MaterialPropertyBlock matPropBlock;
 
-    protected override void OnCreate()
+    protected override void OnStartRunning()
     {
         base.OnCreate();
         Instance = this;
-        UnityEngine.Physics.autoSimulation = false;
-
+        Physics.simulationMode = SimulationMode.Script;
         matPropBlock = new MaterialPropertyBlock();
 
         // setup physics parameters
-        World.GetOrCreateSystem<FixedStepSimulationSystemGroup>().Timestep = (float)(sfloat.One / (sfloat)60.0f);
+        World.GetOrCreateSystemManaged<FixedStepSimulationSystemGroup>().Timestep = (float)(sfloat.One / (sfloat)60.0f);
         Entity physicsStep = EntityManager.CreateEntity(typeof(PhysicsStep));
         PhysicsStep physicsStepParams = PhysicsStep.Default;
         physicsStepParams.SolverStabilizationHeuristicSettings = new Solver.StabilizationHeuristicSettings
@@ -50,7 +49,9 @@ public class GameController : SystemBase
         PhysicsParams physicsParamsDynamic = PhysicsParams.Default;
         physicsParamsDynamic.isDynamic = true;
 
-        CreateBox(new float3(sfloat.Zero, sfloat.Zero, sfloat.Zero), new float3((sfloat)500.0f, (sfloat)2.0f, (sfloat)500.0f), quaternion.identity, material, physicsParamsStatic);
+        CreateBox(new float3(sfloat.Zero, sfloat.Zero, sfloat.Zero),
+            new float3((sfloat)500.0f, (sfloat)2.0f, (sfloat)500.0f), quaternion.identity, material,
+            physicsParamsStatic);
 
         sfloat radius = (sfloat)10.0f;
         int count = 7;
@@ -111,8 +112,13 @@ public class GameController : SystemBase
         );
     }
 
-    private Dictionary<(sfloat radius, UnityS.Physics.Material material), BlobAssetReference<UnityS.Physics.Collider>> ballColliders = new Dictionary<(sfloat radius, UnityS.Physics.Material material), BlobAssetReference<UnityS.Physics.Collider>>();
-    public void CreateBall(float3 position, sfloat radius, UnityS.Physics.Material material, PhysicsParams physicsParams)
+    private Dictionary<(sfloat radius, UnityS.Physics.Material material), BlobAssetReference<UnityS.Physics.Collider>>
+        ballColliders =
+            new Dictionary<(sfloat radius, UnityS.Physics.Material material),
+                BlobAssetReference<UnityS.Physics.Collider>>();
+
+    public void CreateBall(float3 position, sfloat radius, UnityS.Physics.Material material,
+        PhysicsParams physicsParams)
     {
         if (!ballColliders.TryGetValue((radius, material), out BlobAssetReference<UnityS.Physics.Collider> collider))
         {
@@ -138,8 +144,13 @@ public class GameController : SystemBase
         objects.Add(entity, obj);
     }
 
-    private Dictionary<(float3 size, UnityS.Physics.Material material), BlobAssetReference<UnityS.Physics.Collider>> boxColliders = new Dictionary<(float3 size, UnityS.Physics.Material material), BlobAssetReference<UnityS.Physics.Collider>>();
-    public void CreateBox(float3 position, float3 size, quaternion rotation, UnityS.Physics.Material material, PhysicsParams physicsParams)
+    private Dictionary<(float3 size, UnityS.Physics.Material material), BlobAssetReference<UnityS.Physics.Collider>>
+        boxColliders =
+            new Dictionary<(float3 size, UnityS.Physics.Material material),
+                BlobAssetReference<UnityS.Physics.Collider>>();
+
+    public void CreateBox(float3 position, float3 size, quaternion rotation, UnityS.Physics.Material material,
+        PhysicsParams physicsParams)
     {
         if (!boxColliders.TryGetValue((size, material), out BlobAssetReference<UnityS.Physics.Collider> collider))
         {
@@ -172,14 +183,17 @@ public class GameController : SystemBase
         objects.Add(entity, obj);
     }
 
-    public Entity CreateEntity(float3 position, quaternion rotation, BlobAssetReference<UnityS.Physics.Collider> collider,
+    public Entity CreateEntity(float3 position, quaternion rotation,
+        BlobAssetReference<UnityS.Physics.Collider> collider,
         PhysicsParams physicsParams)
     {
         return CreatePhysicsBody(position, rotation, collider, physicsParams);
     }
 
     private readonly List<ComponentType> componentTypes = new List<ComponentType>(20);
-    public unsafe Entity CreatePhysicsBody(float3 position, quaternion orientation, BlobAssetReference<UnityS.Physics.Collider> collider,
+
+    public unsafe Entity CreatePhysicsBody(float3 position, quaternion orientation,
+        BlobAssetReference<UnityS.Physics.Collider> collider,
         PhysicsParams physicsParams)
     {
         componentTypes.Clear();
@@ -207,9 +221,12 @@ public class GameController : SystemBase
         if (physicsParams.isDynamic)
         {
             UnityS.Physics.Collider* colliderPtr = (UnityS.Physics.Collider*)collider.GetUnsafePtr();
-            EntityManager.SetComponentData(entity, PhysicsMass.CreateDynamic(colliderPtr->MassProperties, physicsParams.mass));
+            EntityManager.SetComponentData(entity,
+                PhysicsMass.CreateDynamic(colliderPtr->MassProperties, physicsParams.mass));
             // Calculate the angular velocity in local space from rotation and world angular velocity
-            float3 angularVelocityLocal = math.mul(math.inverse(colliderPtr->MassProperties.MassDistribution.Transform.rot), physicsParams.startingAngularVelocity);
+            float3 angularVelocityLocal =
+                math.mul(math.inverse(colliderPtr->MassProperties.MassDistribution.Transform.rot),
+                    physicsParams.startingAngularVelocity);
             EntityManager.SetComponentData(entity, new PhysicsVelocity()
             {
                 Linear = physicsParams.startingLinearVelocity,
@@ -228,7 +245,7 @@ public class GameController : SystemBase
 
 [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
 [UpdateBefore(typeof(BuildPhysicsWorld))]
-class PhysicsController : SystemBase
+public partial class PhysicsController : SystemBase
 {
     private int frame = 0;
 
@@ -265,15 +282,20 @@ class PhysicsController : SystemBase
     {
         if (frame >= 60 && frame % 10 == 0 && frame < 500)
         {
-            ShootBox((sfloat)0.25f, (sfloat)7.0f, new float3((sfloat)50.0f, (sfloat)20.0f, (sfloat)(-50.0f)), new float3((sfloat)(-100.0f), (sfloat)1.0f, (sfloat)100.0f));
+            ShootBox((sfloat)0.25f, (sfloat)7.0f, new float3((sfloat)50.0f, (sfloat)20.0f, (sfloat)(-50.0f)),
+                new float3((sfloat)(-100.0f), (sfloat)1.0f, (sfloat)100.0f));
         }
+
         if (frame >= 100 && frame % 30 == 0 && frame < 900)
         {
-            ShootBall((sfloat)0.25f, (sfloat)5.0f, new float3((sfloat)0.0f, (sfloat)200.0f, (sfloat)(0.0f)), float3.zero);
+            ShootBall((sfloat)0.25f, (sfloat)5.0f, new float3((sfloat)0.0f, (sfloat)200.0f, (sfloat)(0.0f)),
+                float3.zero);
         }
+
         if (frame == 720)
         {
-            ShootBall((sfloat)20.0f, (sfloat)12.0f, new float3((sfloat)50.0f, (sfloat)20.0f, (sfloat)(-50.0f)), new float3((sfloat)(-100.0f), (sfloat)1.0f, (sfloat)100.0f));
+            ShootBall((sfloat)20.0f, (sfloat)12.0f, new float3((sfloat)50.0f, (sfloat)20.0f, (sfloat)(-50.0f)),
+                new float3((sfloat)(-100.0f), (sfloat)1.0f, (sfloat)100.0f));
         }
 
         ++frame;

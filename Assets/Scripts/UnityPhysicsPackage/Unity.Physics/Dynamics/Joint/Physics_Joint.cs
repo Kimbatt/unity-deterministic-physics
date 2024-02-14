@@ -272,7 +272,7 @@ namespace UnityS.Physics
         public MTransform AFromJoint;
         public MTransform BFromJoint;
         // Note that Constraints needs to be 4-byte aligned for Android 32.
-        public FixedList128<Constraint> Constraints;
+        public FixedList128Bytes<Constraint> Constraints;
         public byte EnableCollision; // If non-zero, allows these bodies to collide
         public byte Version;
 

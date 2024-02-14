@@ -3,38 +3,38 @@ using Unity.Entities;
 namespace UnityS.Transforms
 {
     [UnityEngine.ExecuteAlways]
-    public class TransformSystemGroup : ComponentSystemGroup
+    public partial class TransformSystemGroup : ComponentSystemGroup
     {
     }
 
     [UnityEngine.ExecuteAlways]
     [UpdateInGroup(typeof(TransformSystemGroup))]
-    public class EndFrameParentSystem : ParentSystem
+    public partial class EndFrameParentSystem : ParentSystem
     {
     }
 
     [UnityEngine.ExecuteAlways]
     [UpdateInGroup(typeof(TransformSystemGroup))]
-    public class EndFrameCompositeScaleSystem : CompositeScaleSystem
+    public partial class EndFrameCompositeScaleSystem : CompositeScaleSystem
     {
     }
 
     [UnityEngine.ExecuteAlways]
     [UpdateInGroup(typeof(TransformSystemGroup))]
-    public class EndFrameRotationEulerSystem : RotationEulerSystem
+    public partial class EndFrameRotationEulerSystem : RotationEulerSystem
     {
     }
 
     [UnityEngine.ExecuteAlways]
     [UpdateInGroup(typeof(TransformSystemGroup))]
-    public class EndFramePostRotationEulerSystem : PostRotationEulerSystem
+    public partial class EndFramePostRotationEulerSystem : PostRotationEulerSystem
     {
     }
 
     [UnityEngine.ExecuteAlways]
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateAfter(typeof(EndFrameRotationEulerSystem))]
-    public class EndFrameCompositeRotationSystem : CompositeRotationSystem
+    public partial class EndFrameCompositeRotationSystem : CompositeRotationSystem
     {
     }
 
@@ -43,7 +43,7 @@ namespace UnityS.Transforms
     [UpdateAfter(typeof(EndFrameCompositeRotationSystem))]
     [UpdateAfter(typeof(EndFrameCompositeScaleSystem))]
     [UpdateBefore(typeof(EndFrameLocalToParentSystem))]
-    public class EndFrameTRSToLocalToWorldSystem : TRSToLocalToWorldSystem
+    public partial class EndFrameTRSToLocalToWorldSystem : TRSToLocalToWorldSystem
     {
     }
 
@@ -51,7 +51,7 @@ namespace UnityS.Transforms
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateAfter(typeof(EndFrameParentSystem))]
     [UpdateAfter(typeof(EndFrameCompositeRotationSystem))]
-    public class EndFrameParentScaleInverseSystem : ParentScaleInverseSystem
+    public partial class EndFrameParentScaleInverseSystem : ParentScaleInverseSystem
     {
     }
 
@@ -60,14 +60,14 @@ namespace UnityS.Transforms
     [UpdateAfter(typeof(EndFrameCompositeRotationSystem))]
     [UpdateAfter(typeof(EndFrameCompositeScaleSystem))]
     [UpdateAfter(typeof(EndFrameParentScaleInverseSystem))]
-    public class EndFrameTRSToLocalToParentSystem : TRSToLocalToParentSystem
+    public partial class EndFrameTRSToLocalToParentSystem : TRSToLocalToParentSystem
     {
     }
 
     [UnityEngine.ExecuteAlways]
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateAfter(typeof(EndFrameTRSToLocalToParentSystem))]
-    public class EndFrameLocalToParentSystem : LocalToParentSystem
+    public partial class EndFrameLocalToParentSystem : LocalToParentSystem
     {
     }
 
@@ -75,7 +75,7 @@ namespace UnityS.Transforms
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateAfter(typeof(EndFrameTRSToLocalToWorldSystem))]
     [UpdateAfter(typeof(EndFrameLocalToParentSystem))]
-    public class EndFrameWorldToLocalSystem : WorldToLocalSystem
+    public partial class EndFrameWorldToLocalSystem : WorldToLocalSystem
     {
     }
 }

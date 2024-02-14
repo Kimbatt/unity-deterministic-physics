@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -14,7 +15,7 @@ namespace UnityS.Physics.Systems
     // and a joint for every entity which has a joint component.
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [AlwaysUpdateSystem]
-    public class BuildPhysicsWorld : SystemBase, IPhysicsSystem
+    public partial class BuildPhysicsWorld : SystemBase, IPhysicsSystem
     {
         private JobHandle m_InputDependencyToComplete;
         private JobHandle m_InputDependency;
@@ -34,7 +35,8 @@ namespace UnityS.Physics.Systems
         StepPhysicsWorld m_StepPhysicsWorldSystem;
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-        internal NativeHashMap<uint, long> IntegrityCheckMap = new NativeHashMap<uint, long>(4, Allocator.Persistent);
+        internal NativeParallelHashMap<uint, long> IntegrityCheckMap =
+            new NativeParallelHashMap<uint, long>(4, Allocator.Persistent);
 #endif
 
         protected override void OnCreate()
@@ -89,7 +91,7 @@ namespace UnityS.Physics.Systems
 
             CollisionWorldProxyGroup = GetEntityQuery(ComponentType.ReadWrite<CollisionWorldProxy>());
 
-            m_StepPhysicsWorldSystem = World.GetOrCreateSystem<StepPhysicsWorld>();
+            m_StepPhysicsWorldSystem = World.GetOrCreateSystemManaged<StepPhysicsWorld>();
         }
 
         protected override void OnDestroy()
@@ -180,7 +182,7 @@ namespace UnityS.Physics.Systems
                         PhysicsColliderType = physicsColliderType,
                         m_LastSystemVersion = LastSystemVersion,
                         Result = HaveStaticBodiesChanged
-                    }.ScheduleParallel(StaticEntityGroup, 1, Dependency);
+                    }.ScheduleParallel(StaticEntityGroup, Dependency);
                 }
             }
 
@@ -203,8 +205,13 @@ namespace UnityS.Physics.Systems
                 // between dynamic bodies and their motions.
                 if (numDynamicBodies > 0)
                 {
+                    var chunkBaseEntityIndices = DynamicEntityGroup.CalculateBaseEntityIndexArrayAsync(
+                        this.World.UpdateAllocator.ToAllocator,
+                        Dependency, out JobHandle indexArrayGen);
+                    Dependency = indexArrayGen;
                     jobHandles.Add(new Jobs.CreateRigidBodies
                     {
+                        ChunkBaseEntityIndices = chunkBaseEntityIndices,
                         EntityType = entityType,
                         LocalToWorldType = localToWorldType,
                         ParentType = parentType,
@@ -216,10 +223,15 @@ namespace UnityS.Physics.Systems
                         FirstBodyIndex = 0,
                         RigidBodies = PhysicsWorld.Bodies,
                         EntityBodyIndexMap = PhysicsWorld.CollisionWorld.EntityBodyIndexMap.AsParallelWriter(),
-                    }.ScheduleParallel(DynamicEntityGroup, 1, Dependency));
+                    }.ScheduleParallel(DynamicEntityGroup, Dependency));
 
+                    var chunkBaseEntityIndices2 = DynamicEntityGroup.CalculateBaseEntityIndexArrayAsync(
+                        this.World.UpdateAllocator.ToAllocator,
+                        Dependency, out JobHandle dep2);
+                    Dependency = dep2;
                     jobHandles.Add(new Jobs.CreateMotions
                     {
+                        ChunkBaseEntityIndices = chunkBaseEntityIndices2,
                         PositionType = positionType,
                         RotationType = rotationType,
                         PhysicsVelocityType = physicsVelocityType,
@@ -230,15 +242,21 @@ namespace UnityS.Physics.Systems
 
                         MotionDatas = PhysicsWorld.MotionDatas,
                         MotionVelocities = PhysicsWorld.MotionVelocities
-                    }.ScheduleParallel(DynamicEntityGroup, 1, Dependency));
+                    }.ScheduleParallel(DynamicEntityGroup, Dependency));
                 }
 
                 // Now, schedule creation of static bodies, with FirstBodyIndex pointing after
                 // the dynamic and kinematic bodies
                 if (numStaticBodies > 0)
                 {
+                    var indices = StaticEntityGroup.CalculateBaseEntityIndexArrayAsync(
+                        this.World.UpdateAllocator.ToAllocator,
+                        Dependency, out JobHandle indexArrayGen);
+                    Dependency = indexArrayGen;
+
                     jobHandles.Add(new Jobs.CreateRigidBodies
                     {
+                        ChunkBaseEntityIndices = indices,
                         EntityType = entityType,
                         LocalToWorldType = localToWorldType,
                         ParentType = parentType,
@@ -250,7 +268,7 @@ namespace UnityS.Physics.Systems
                         FirstBodyIndex = numDynamicBodies,
                         RigidBodies = PhysicsWorld.Bodies,
                         EntityBodyIndexMap = PhysicsWorld.CollisionWorld.EntityBodyIndexMap.AsParallelWriter(),
-                    }.ScheduleParallel(StaticEntityGroup, 1, Dependency));
+                    }.ScheduleParallel(StaticEntityGroup, Dependency));
                 }
 
                 var handle = JobHandle.CombineDependencies(jobHandles);
@@ -259,8 +277,14 @@ namespace UnityS.Physics.Systems
                 // Build joints
                 if (numJoints > 0)
                 {
+                    var chunkBaseEntityIndices2 = JointEntityGroup.CalculateBaseEntityIndexArrayAsync(
+                        this.World.UpdateAllocator.ToAllocator,
+                        handle, out JobHandle dep2);
+                    handle = dep2;
+
                     jobHandles.Add(new Jobs.CreateJoints
                     {
+                        ChunkBaseEntityIndices = chunkBaseEntityIndices2,
                         ConstrainedBodyPairComponentType = physicsConstrainedBodyPairType,
                         JointComponentType = physicsJointType,
                         EntityType = entityType,
@@ -270,12 +294,12 @@ namespace UnityS.Physics.Systems
                         NumDynamicBodies = numDynamicBodies,
                         EntityBodyIndexMap = PhysicsWorld.CollisionWorld.EntityBodyIndexMap,
                         EntityJointIndexMap = PhysicsWorld.DynamicsWorld.EntityJointIndexMap.AsParallelWriter(),
-                    }.ScheduleParallel(JointEntityGroup, 1, handle));
+                    }.ScheduleParallel(JointEntityGroup, handle));
                 }
 
                 // Build the broadphase
                 // TODO: could optimize this by gathering the AABBs and filters at the same time as building the bodies above
-                sfloat timeStep = (sfloat)Time.DeltaTime;
+                sfloat timeStep = (sfloat)SystemAPI.Time.DeltaTime;
 
                 PhysicsStep stepComponent = PhysicsStep.Default;
                 if (HasSingleton<PhysicsStep>())
@@ -300,7 +324,8 @@ namespace UnityS.Physics.Systems
 
         public void AddInputDependencyToComplete(JobHandle dependencyToComplete)
         {
-            m_InputDependencyToComplete = JobHandle.CombineDependencies(m_InputDependencyToComplete, dependencyToComplete);
+            m_InputDependencyToComplete =
+                JobHandle.CombineDependencies(m_InputDependencyToComplete, dependencyToComplete);
         }
 
         public void AddInputDependency(JobHandle inputDep)
@@ -331,7 +356,7 @@ namespace UnityS.Physics.Systems
         private static class Jobs
         {
             [BurstCompile]
-            internal struct CheckStaticBodyChangesJob : IJobEntityBatch
+            internal struct CheckStaticBodyChangesJob : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldType;
                 [ReadOnly] public ComponentTypeHandle<Parent> ParentType;
@@ -339,12 +364,11 @@ namespace UnityS.Physics.Systems
                 [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
 
-                [NativeDisableParallelForRestriction]
-                public NativeArray<int> Result;
+                [NativeDisableParallelForRestriction] public NativeArray<int> Result;
 
                 public uint m_LastSystemVersion;
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+                public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
                 {
                     bool didBatchChange =
                         batchInChunk.DidChange(LocalToWorldType, m_LastSystemVersion) ||
@@ -368,10 +392,11 @@ namespace UnityS.Physics.Systems
             {
                 [NativeDisableContainerSafetyRestriction]
                 public NativeArray<RigidBody> NativeBodies;
+
                 public int BodyIndex;
 
                 [NativeDisableContainerSafetyRestriction]
-                public NativeHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
+                public NativeParallelHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
 
                 public void Execute()
                 {
@@ -387,8 +412,9 @@ namespace UnityS.Physics.Systems
             }
 
             [BurstCompile]
-            internal struct CreateRigidBodies : IJobEntityBatchWithIndex
+            internal struct CreateRigidBodies : IJobChunk
             {
+                [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
                 [ReadOnly] public EntityTypeHandle EntityType;
                 [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldType;
                 [ReadOnly] public ComponentTypeHandle<Parent> ParentType;
@@ -398,12 +424,17 @@ namespace UnityS.Physics.Systems
                 [ReadOnly] public ComponentTypeHandle<PhysicsCustomTags> PhysicsCustomTagsType;
                 [ReadOnly] public int FirstBodyIndex;
 
-                [NativeDisableContainerSafetyRestriction] public NativeArray<RigidBody> RigidBodies;
-                [NativeDisableContainerSafetyRestriction] public NativeHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
+                [NativeDisableContainerSafetyRestriction]
+                public NativeArray<RigidBody> RigidBodies;
+
+                [NativeDisableContainerSafetyRestriction]
+                public NativeParallelHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
 
                 //public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int firstEntityIndex)
+                public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
                 {
+                    int firstEntityIndex = ChunkBaseEntityIndices[batchIndex];
+
                     NativeArray<PhysicsCollider> chunkColliders = batchInChunk.GetNativeArray(PhysicsColliderType);
                     NativeArray<LocalToWorld> chunkLocalToWorlds = batchInChunk.GetNativeArray(LocalToWorldType);
                     NativeArray<Translation> chunkPositions = batchInChunk.GetNativeArray(PositionType);
@@ -469,8 +500,9 @@ namespace UnityS.Physics.Systems
             }
 
             [BurstCompile]
-            internal struct CreateMotions : IJobEntityBatchWithIndex
+            internal struct CreateMotions : IJobChunk
             {
+                [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
                 [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
                 [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
@@ -482,15 +514,18 @@ namespace UnityS.Physics.Systems
                 [NativeDisableParallelForRestriction] public NativeArray<MotionData> MotionDatas;
                 [NativeDisableParallelForRestriction] public NativeArray<MotionVelocity> MotionVelocities;
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int firstEntityIndex)
+                public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
                 {
+                    int firstEntityIndex = ChunkBaseEntityIndices[batchIndex];
                     NativeArray<Translation> chunkPositions = batchInChunk.GetNativeArray(PositionType);
                     NativeArray<Rotation> chunkRotations = batchInChunk.GetNativeArray(RotationType);
                     NativeArray<PhysicsVelocity> chunkVelocities = batchInChunk.GetNativeArray(PhysicsVelocityType);
                     NativeArray<PhysicsMass> chunkMasses = batchInChunk.GetNativeArray(PhysicsMassType);
-                    NativeArray<PhysicsMassOverride> chunkMassOverrides = batchInChunk.GetNativeArray(PhysicsMassOverrideType);
+                    NativeArray<PhysicsMassOverride> chunkMassOverrides =
+                        batchInChunk.GetNativeArray(PhysicsMassOverrideType);
                     NativeArray<PhysicsDamping> chunkDampings = batchInChunk.GetNativeArray(PhysicsDampingType);
-                    NativeArray<PhysicsGravityFactor> chunkGravityFactors = batchInChunk.GetNativeArray(PhysicsGravityFactorType);
+                    NativeArray<PhysicsGravityFactor> chunkGravityFactors =
+                        batchInChunk.GetNativeArray(PhysicsGravityFactorType);
 
                     int motionStart = firstEntityIndex;
                     int instanceCount = batchInChunk.Count;
@@ -517,15 +552,21 @@ namespace UnityS.Physics.Systems
 
                     for (int i = 0, motionIndex = motionStart; i < instanceCount; i++, motionIndex++)
                     {
-                        var isKinematic = !hasChunkPhysicsMassType || hasChunkPhysicsMassOverrideType && chunkMassOverrides[i].IsKinematic != 0;
+                        var isKinematic = !hasChunkPhysicsMassType ||
+                                          hasChunkPhysicsMassOverrideType && chunkMassOverrides[i].IsKinematic != 0;
                         MotionVelocities[motionIndex] = new MotionVelocity
                         {
                             LinearVelocity = chunkVelocities[i].Linear,
                             AngularVelocity = chunkVelocities[i].Angular,
-                            InverseInertia = isKinematic ? defaultPhysicsMass.InverseInertia : chunkMasses[i].InverseInertia,
+                            InverseInertia = isKinematic
+                                ? defaultPhysicsMass.InverseInertia
+                                : chunkMasses[i].InverseInertia,
                             InverseMass = isKinematic ? defaultPhysicsMass.InverseMass : chunkMasses[i].InverseMass,
-                            AngularExpansionFactor = hasChunkPhysicsMassType ? chunkMasses[i].AngularExpansionFactor : defaultPhysicsMass.AngularExpansionFactor,
-                            GravityFactor = isKinematic ? sfloat.Zero : hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor
+                            AngularExpansionFactor = hasChunkPhysicsMassType
+                                ? chunkMasses[i].AngularExpansionFactor
+                                : defaultPhysicsMass.AngularExpansionFactor,
+                            GravityFactor = isKinematic ? sfloat.Zero :
+                                hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor
                         };
                     }
 
@@ -547,7 +588,7 @@ namespace UnityS.Physics.Systems
                             WorldFromMotion = new RigidTransform(
                                 math.mul(chunkRotations[i].Value, mass.InertiaOrientation),
                                 math.rotate(chunkRotations[i].Value, mass.CenterOfMass) + chunkPositions[i].Value
-                                ),
+                            ),
                             BodyFromMotion = new RigidTransform(mass.InertiaOrientation, mass.CenterOfMass),
                             LinearDamping = damping.Linear,
                             AngularDamping = damping.Angular
@@ -557,23 +598,29 @@ namespace UnityS.Physics.Systems
             }
 
             [BurstCompile]
-            internal struct CreateJoints : IJobEntityBatchWithIndex
+            internal struct CreateJoints : IJobChunk
             {
+                [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
                 [ReadOnly] public ComponentTypeHandle<PhysicsConstrainedBodyPair> ConstrainedBodyPairComponentType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsJoint> JointComponentType;
                 [ReadOnly] public EntityTypeHandle EntityType;
                 [ReadOnly] public NativeArray<RigidBody> RigidBodies;
                 [ReadOnly] public int NumDynamicBodies;
-                [ReadOnly] public NativeHashMap<Entity, int> EntityBodyIndexMap;
+                [ReadOnly] public NativeParallelHashMap<Entity, int> EntityBodyIndexMap;
 
                 [NativeDisableParallelForRestriction] public NativeArray<Joint> Joints;
-                [NativeDisableParallelForRestriction] public NativeHashMap<Entity, int>.ParallelWriter EntityJointIndexMap;
+
+                [NativeDisableParallelForRestriction]
+                public NativeParallelHashMap<Entity, int>.ParallelWriter EntityJointIndexMap;
 
                 public int DefaultStaticBodyIndex;
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int firstEntityIndex)
+                public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
                 {
-                    NativeArray<PhysicsConstrainedBodyPair> chunkBodyPair = batchInChunk.GetNativeArray(ConstrainedBodyPairComponentType);
+                    int firstEntityIndex = ChunkBaseEntityIndices[batchIndex];
+
+                    NativeArray<PhysicsConstrainedBodyPair> chunkBodyPair =
+                        batchInChunk.GetNativeArray(ConstrainedBodyPairComponentType);
                     NativeArray<PhysicsJoint> chunkJoint = batchInChunk.GetNativeArray(JointComponentType);
                     NativeArray<Entity> chunkEntities = batchInChunk.GetNativeArray(EntityType);
 
@@ -631,16 +678,17 @@ namespace UnityS.Physics.Systems
             #region Integrity checks
 
             [BurstCompile]
-            internal struct RecordDynamicBodyIntegrity : IJobEntityBatch
+            internal struct RecordDynamicBodyIntegrity : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
                 [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
 
-                public NativeHashMap<uint, long> IntegrityCheckMap;
+                public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-                internal static void AddOrIncrement(NativeHashMap<uint, long> integrityCheckMap, uint systemVersion)
+                internal static void AddOrIncrement(NativeParallelHashMap<uint, long> integrityCheckMap,
+                    uint systemVersion)
                 {
                     if (integrityCheckMap.TryGetValue(systemVersion, out long occurences))
                     {
@@ -653,7 +701,7 @@ namespace UnityS.Physics.Systems
                     }
                 }
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+                public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
                 {
                     AddOrIncrement(IntegrityCheckMap, batchInChunk.GetOrderVersion());
                     AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsVelocityType));
@@ -661,10 +709,12 @@ namespace UnityS.Physics.Systems
                     {
                         AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PositionType));
                     }
+
                     if (batchInChunk.Has(RotationType))
                     {
                         AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(RotationType));
                     }
+
                     if (batchInChunk.Has(PhysicsColliderType))
                     {
                         AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
@@ -673,16 +723,17 @@ namespace UnityS.Physics.Systems
             }
 
             [BurstCompile]
-            internal struct RecordColliderIntegrity : IJobEntityBatch
+            internal struct RecordColliderIntegrity : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-                public NativeHashMap<uint, long> IntegrityCheckMap;
+                public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+                public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
                 {
                     if (batchInChunk.Has(PhysicsColliderType))
                     {
-                        RecordDynamicBodyIntegrity.AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+                        RecordDynamicBodyIntegrity.AddOrIncrement(IntegrityCheckMap,
+                            batchInChunk.GetChangeVersion(PhysicsColliderType));
                     }
                 }
             }
@@ -694,7 +745,7 @@ namespace UnityS.Physics.Systems
 
         #region Integrity checks
 
-        internal void RecordIntegrity(NativeHashMap<uint, long> integrityCheckMap)
+        internal void RecordIntegrity(NativeParallelHashMap<uint, long> integrityCheckMap)
         {
             var positionType = GetComponentTypeHandle<Translation>(true);
             var rotationType = GetComponentTypeHandle<Rotation>(true);

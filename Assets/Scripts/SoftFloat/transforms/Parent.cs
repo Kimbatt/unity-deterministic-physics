@@ -11,7 +11,7 @@ namespace UnityS.Transforms
     }
 
     [Serializable]
-    public struct PreviousParent : ISystemStateComponentData
+    public struct PreviousParent : ICleanupComponentData
     {
         public Entity Value;
     }
@@ -19,7 +19,7 @@ namespace UnityS.Transforms
     [Serializable]
     [InternalBufferCapacity(8)]
     [WriteGroup(typeof(ParentScaleInverse))]
-    public struct Child : ISystemStateBufferElementData
+    public struct Child : ICleanupBufferElementData
     {
         public Entity Value;
     }

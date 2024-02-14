@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine.Assertions;
@@ -135,7 +136,7 @@ namespace UnityS.Physics
     }
 
     // A collector which stores every hit.
-    public struct AllHitsCollector<T> : ICollector<T> where T : struct, IQueryResult
+    public struct AllHitsCollector<T> : ICollector<T> where T : unmanaged, IQueryResult
     {
         public bool EarlyOutOnFirstHit => false;
         public sfloat MaxFraction { get; }

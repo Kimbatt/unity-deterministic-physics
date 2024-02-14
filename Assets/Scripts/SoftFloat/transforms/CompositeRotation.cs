@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -37,7 +38,7 @@ namespace UnityS.Transforms
     }
 
     // CompositeRotation = RotationPivotTranslation * RotationPivot * Rotation * PostRotation * RotationPivot^-1
-    public abstract class CompositeRotationSystem : JobComponentSystem
+    public abstract partial class CompositeRotationSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -51,7 +52,7 @@ namespace UnityS.Transforms
             public ComponentTypeHandle<CompositeRotation> CompositeRotationTypeHandle;
             public uint LastSystemVersion;
 
-            public void Execute(ArchetypeChunk chunk, int index, int entityOffset)
+            public void Execute(in ArchetypeChunk chunk, int chunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 var chunkRotationPivotTranslations = chunk.GetNativeArray(RotationPivotTranslationTypeHandle);
                 var chunkRotations = chunk.GetNativeArray(RotationTypeHandle);
@@ -375,7 +376,7 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             var compositeRotationType = GetComponentTypeHandle<CompositeRotation>(false);
             var rotationType = GetComponentTypeHandle<Rotation>(true);
@@ -392,8 +393,7 @@ namespace UnityS.Transforms
                 RotationPivotTranslationTypeHandle = rotationPivotTranslationType,
                 LastSystemVersion = LastSystemVersion
             };
-            var toCompositeRotationJobHandle = toCompositeRotationJob.Schedule(m_Group, inputDeps);
-            return toCompositeRotationJobHandle;
+            Dependency = toCompositeRotationJob.ScheduleParallel(m_Group, Dependency);
         }
     }
 }

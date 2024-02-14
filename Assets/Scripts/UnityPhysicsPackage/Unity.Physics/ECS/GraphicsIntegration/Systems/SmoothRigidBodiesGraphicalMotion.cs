@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -14,7 +15,7 @@ namespace UnityS.Physics.GraphicsIntegration
     /// </summary>
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateBefore(typeof(EndFrameTRSToLocalToWorldSystem))]
-    public class SmoothRigidBodiesGraphicalMotion : SystemBase, IPhysicsSystem
+    public partial class SmoothRigidBodiesGraphicalMotion : SystemBase, IPhysicsSystem
     {
         JobHandle m_InputDependency;
         JobHandle m_OutputDependency;
@@ -57,14 +58,14 @@ namespace UnityS.Physics.GraphicsIntegration
                 }
             });
             RequireForUpdate(SmoothedDynamicBodiesGroup);
-            m_RecordMostRecentFixedTime = World.GetOrCreateSystem<RecordMostRecentFixedTime>();
+            m_RecordMostRecentFixedTime = World.GetOrCreateSystemManaged<RecordMostRecentFixedTime>();
         }
 
         protected override void OnUpdate()
         {
             // Note: this is only for rendering, not affecting the physics simulation
             // So float operations can be used here, because it's not required to be deterministic
-            sfloat timeAhead = (sfloat)(Time.ElapsedTime - m_RecordMostRecentFixedTime.MostRecentElapsedTime);
+            sfloat timeAhead = (sfloat)(SystemAPI.Time.ElapsedTime - m_RecordMostRecentFixedTime.MostRecentElapsedTime);
             sfloat timeStep = (sfloat)m_RecordMostRecentFixedTime.MostRecentDeltaTime;
             if (timeAhead <= sfloat.Zero || timeStep == sfloat.Zero)
                 return;
@@ -85,7 +86,7 @@ namespace UnityS.Physics.GraphicsIntegration
                 LocalToWorldType = GetComponentTypeHandle<LocalToWorld>(),
                 TimeAhead = timeAhead,
                 NormalizedTimeAhead = normalizedTimeAhead
-            }.ScheduleParallel(SmoothedDynamicBodiesGroup, 1, Dependency);
+            }.ScheduleParallel(SmoothedDynamicBodiesGroup, Dependency);
 
             // Combine implicit output dependency with user one
             m_OutputDependency = Dependency;
@@ -97,7 +98,7 @@ namespace UnityS.Physics.GraphicsIntegration
         }
 
         [BurstCompile]
-        struct SmoothMotionJob : IJobEntityBatch
+        struct SmoothMotionJob : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<Translation> TranslationType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
@@ -111,7 +112,7 @@ namespace UnityS.Physics.GraphicsIntegration
             public sfloat TimeAhead;
             public sfloat NormalizedTimeAhead;
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
                 var hasNonUniformScale = batchInChunk.Has(NonUniformScaleType);
                 var hasScale = batchInChunk.Has(ScaleType);
@@ -125,8 +126,10 @@ namespace UnityS.Physics.GraphicsIntegration
                 NativeArray<Scale> scales = batchInChunk.GetNativeArray(ScaleType);
                 NativeArray<CompositeScale> compositeScales = batchInChunk.GetNativeArray(CompositeScaleType);
                 NativeArray<PhysicsMass> physicsMasses = batchInChunk.GetNativeArray(PhysicsMassType);
-                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = batchInChunk.GetNativeArray(PhysicsGraphicalSmoothingType);
-                NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = batchInChunk.GetNativeArray(InterpolationBufferType);
+                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings =
+                    batchInChunk.GetNativeArray(PhysicsGraphicalSmoothingType);
+                NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers =
+                    batchInChunk.GetNativeArray(InterpolationBufferType);
                 NativeArray<LocalToWorld> localToWorlds = batchInChunk.GetNativeArray(LocalToWorldType);
 
                 var defaultPhysicsMass = PhysicsMass.CreateKinematic(MassProperties.UnitSphere);

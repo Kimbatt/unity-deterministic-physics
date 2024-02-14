@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -22,7 +23,7 @@ namespace UnityS.Physics.GraphicsIntegration
     /// </summary>
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld))]
-    public class BufferInterpolatedRigidBodiesMotion : SystemBase, IPhysicsSystem
+    public partial class BufferInterpolatedRigidBodiesMotion : SystemBase, IPhysicsSystem
     {
         JobHandle m_InputDependency;
         JobHandle m_OutputDependency;
@@ -49,7 +50,7 @@ namespace UnityS.Physics.GraphicsIntegration
 
         protected override void OnCreate()
         {
-            m_ExportPhysicsWorldSystem = World.GetOrCreateSystem<ExportPhysicsWorld>();
+            m_ExportPhysicsWorldSystem = World.GetOrCreateSystemManaged<ExportPhysicsWorld>();
 
             InterpolatedDynamicBodiesGroup = GetEntityQuery(new EntityQueryDesc
             {
@@ -81,7 +82,7 @@ namespace UnityS.Physics.GraphicsIntegration
                 RotationType = GetComponentTypeHandle<Rotation>(true),
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>()
-            }.ScheduleParallel(InterpolatedDynamicBodiesGroup, 1, Dependency);
+            }.ScheduleParallel(InterpolatedDynamicBodiesGroup, Dependency);
 
             // Combine implicit output dependency with user one
             m_OutputDependency = Dependency;
@@ -94,14 +95,14 @@ namespace UnityS.Physics.GraphicsIntegration
         }
 
         [BurstCompile]
-        unsafe struct UpdateInterpolationBuffersJob : IJobEntityBatch
+        unsafe struct UpdateInterpolationBuffersJob : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             [ReadOnly] public ComponentTypeHandle<Translation> TranslationType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
             public ComponentTypeHandle<PhysicsGraphicalInterpolationBuffer> InterpolationBufferType;
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk batchInChunk, int batchIndex, bool useMask, in v128 mask)
             {
                 NativeArray<PhysicsVelocity> physicsVelocities = batchInChunk.GetNativeArray(PhysicsVelocityType);
                 NativeArray<Translation> positions = batchInChunk.GetNativeArray(TranslationType);

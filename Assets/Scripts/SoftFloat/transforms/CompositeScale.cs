@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -33,7 +34,7 @@ namespace UnityS.Transforms
 
     // CompositeScale = ScalePivotTranslation * ScalePivot * Scale * ScalePivot^-1
     // (or) CompositeScale = ScalePivotTranslation * ScalePivot * NonUniformScale * ScalePivot^-1
-    public abstract class CompositeScaleSystem : JobComponentSystem
+    public abstract partial class CompositeScaleSystem : SystemBase
     {
         private EntityQuery m_Group;
 
@@ -47,7 +48,7 @@ namespace UnityS.Transforms
             public ComponentTypeHandle<CompositeScale> CompositeScaleTypeHandle;
             public uint LastSystemVersion;
 
-            public void Execute(ArchetypeChunk chunk, int index, int entityOffset)
+            public void Execute(in ArchetypeChunk chunk, int chunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 var chunkScalePivotTranslations = chunk.GetNativeArray(ScalePivotTranslationTypeHandle);
                 var chunkScales = chunk.GetNativeArray(ScaleTypeHandle);
@@ -290,25 +291,18 @@ namespace UnityS.Transforms
             });
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
-            var compositeScaleType = GetComponentTypeHandle<CompositeScale>(false);
-            var scaleType = GetComponentTypeHandle<Scale>(true);
-            var scaleAxisType = GetComponentTypeHandle<NonUniformScale>(true);
-            var scalePivotTranslationType = GetComponentTypeHandle<ScalePivotTranslation>(true);
-            var scalePivotType = GetComponentTypeHandle<ScalePivot>(true);
-
             var toCompositeScaleJob = new ToCompositeScale
             {
-                CompositeScaleTypeHandle = compositeScaleType,
-                NonUniformScaleTypeHandle = scaleAxisType,
-                ScaleTypeHandle = scaleType,
-                ScalePivotTypeHandle = scalePivotType,
-                ScalePivotTranslationTypeHandle = scalePivotTranslationType,
+                CompositeScaleTypeHandle = GetComponentTypeHandle<CompositeScale>(false),
+                NonUniformScaleTypeHandle = GetComponentTypeHandle<NonUniformScale>(true),
+                ScaleTypeHandle = GetComponentTypeHandle<Scale>(true),
+                ScalePivotTypeHandle = GetComponentTypeHandle<ScalePivot>(true),
+                ScalePivotTranslationTypeHandle = GetComponentTypeHandle<ScalePivotTranslation>(true),
                 LastSystemVersion = LastSystemVersion
             };
-            var toCompositeScaleJobHandle = toCompositeScaleJob.Schedule(m_Group, inputDeps);
-            return toCompositeScaleJobHandle;
+            Dependency = toCompositeScaleJob.ScheduleParallel(m_Group, Dependency);
         }
     }
 }

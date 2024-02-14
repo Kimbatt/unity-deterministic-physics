@@ -1,5 +1,6 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -8,7 +9,7 @@ using UnityS.Mathematics;
 
 namespace UnityS.Transforms
 {
-    public abstract class LocalToParentSystem : JobComponentSystem
+    public abstract partial class LocalToParentSystem : SystemBase
     {
         private EntityQuery m_RootsGroup;
         private EntityQueryMask m_LocalToWorldWriteGroupMask;
@@ -19,13 +20,13 @@ namespace UnityS.Transforms
         {
             [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldTypeHandle;
             [ReadOnly] public BufferTypeHandle<Child> ChildTypeHandle;
-            [ReadOnly] public BufferFromEntity<Child> ChildFromEntity;
-            [ReadOnly] public ComponentDataFromEntity<LocalToParent> LocalToParentFromEntity;
+            [ReadOnly] public BufferLookup<Child> ChildFromEntity;
+            [ReadOnly] public ComponentLookup<LocalToParent> LocalToParentFromEntity;
             [ReadOnly] public EntityQueryMask LocalToWorldWriteGroupMask;
             public uint LastSystemVersion;
 
             [NativeDisableContainerSafetyRestriction]
-            public ComponentDataFromEntity<LocalToWorld> LocalToWorldFromEntity;
+            public ComponentLookup<LocalToWorld> LocalToWorldFromEntity;
 
             void ChildLocalToWorld(float4x4 parentLocalToWorld, Entity entity, bool updateChildrenTransform)
             {
@@ -34,7 +35,7 @@ namespace UnityS.Transforms
 
                 float4x4 localToWorldMatrix;
 
-                if (updateChildrenTransform && LocalToWorldWriteGroupMask.Matches(entity))
+                if (updateChildrenTransform && LocalToWorldWriteGroupMask.MatchesIgnoreFilter(entity))
                 {
                     var localToParent = LocalToParentFromEntity[entity];
                     localToWorldMatrix = math.mul(parentLocalToWorld, localToParent.Value);
@@ -55,7 +56,7 @@ namespace UnityS.Transforms
                 }
             }
 
-            public void Execute(ArchetypeChunk chunk, int index, int entityOffset)
+            public void Execute(in ArchetypeChunk chunk, int index, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 bool updateChildrenTransform =
                     chunk.DidChange<LocalToWorld>(LocalToWorldTypeHandle, LastSystemVersion) ||
@@ -103,26 +104,19 @@ namespace UnityS.Transforms
             }));
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
-            var localToWorldType = GetComponentTypeHandle<LocalToWorld>(true);
-            var childType = GetBufferTypeHandle<Child>(true);
-            var childFromEntity = GetBufferFromEntity<Child>(true);
-            var localToParentFromEntity = GetComponentDataFromEntity<LocalToParent>(true);
-            var localToWorldFromEntity = GetComponentDataFromEntity<LocalToWorld>();
-
             var updateHierarchyJob = new UpdateHierarchy
             {
-                LocalToWorldTypeHandle = localToWorldType,
-                ChildTypeHandle = childType,
-                ChildFromEntity = childFromEntity,
-                LocalToParentFromEntity = localToParentFromEntity,
-                LocalToWorldFromEntity = localToWorldFromEntity,
+                LocalToWorldTypeHandle = GetComponentTypeHandle<LocalToWorld>(true),
+                ChildTypeHandle = GetBufferTypeHandle<Child>(true),
+                ChildFromEntity = GetBufferLookup<Child>(true),
+                LocalToParentFromEntity = GetComponentLookup<LocalToParent>(true),
+                LocalToWorldFromEntity = GetComponentLookup<LocalToWorld>(),
                 LocalToWorldWriteGroupMask = m_LocalToWorldWriteGroupMask,
                 LastSystemVersion = LastSystemVersion
             };
-            var updateHierarchyJobHandle = updateHierarchyJob.Schedule(m_RootsGroup, inputDeps);
-            return updateHierarchyJobHandle;
+            Dependency = updateHierarchyJob.ScheduleParallel(m_RootsGroup, Dependency);
         }
     }
 }
